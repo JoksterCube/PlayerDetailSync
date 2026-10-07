@@ -1,0 +1,273 @@
+{
+  "info": {
+    "_postman_id": "f4bd8cae-84ea-4936-a27e-a4a6b33fa31d",
+    "name": "PlayerDetailSync API",
+    "description": "Smoke tests for the PlayerDetailSync server API. Set apiPassword locally. Run Players (summary), Player details, Followers, then Follower details when a follower is available.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8785",
+      "type": "string"
+    },
+    {
+      "key": "apiPassword",
+      "value": "",
+      "type": "string",
+      "description": "Set locally. Do not sync or share the collection with a password filled in."
+    },
+    {
+      "key": "playerId",
+      "value": "",
+      "type": "string",
+      "description": "Populated from the first player in Players (summary)."
+    },
+    {
+      "key": "followerId",
+      "value": "",
+      "type": "string",
+      "description": "URL-encoded stable creature ID populated by Followers. Select a player with followers first."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health rejects missing password",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/v1/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Unauthenticated request returns 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Password",
+            "value": "{{apiPassword}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Health request succeeds', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test('Health fields are present', function () {",
+              "    pm.expect(body.status).to.eql('ok');",
+              "    pm.expect(body.updatedAtUtc).to.be.a('string');",
+              "    pm.expect(body.connectedPlayerCount).to.be.a('number');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Players (summary)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Password",
+            "value": "{{apiPassword}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/players",
+        "description": "Returns all cached players, online and offline. Saves the first playerId for the cache-only details request."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Player list request succeeds', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test('Summary fields are present', function () {",
+              "    pm.expect(body.updatedAtUtc).to.be.a('string');",
+              "    pm.expect(body.players).to.be.an('array');",
+              "});",
+              "body.players.forEach(function (player) {",
+              "    pm.expect(player.playerId).to.be.a('string').and.not.empty;",
+              "    pm.expect(player.name).to.be.a('string').and.not.empty;",
+              "    pm.expect(player.online).to.be.a('boolean');",
+              "    pm.expect(player.lastSeenUtc).to.be.a('string').and.not.empty;",
+              "    pm.expect(player.position.x).to.be.a('number');",
+              "    pm.expect(player.position.y).to.be.a('number');",
+              "    pm.expect(player.position.z).to.be.a('number');",
+              "});",
+              "if (body.players.length > 0) {",
+              "    pm.collectionVariables.set('playerId', body.players[0].playerId);",
+              "} else {",
+              "    pm.collectionVariables.unset('playerId');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Player details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-API-Password",
+            "value": "{{apiPassword}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}",
+        "description": "Returns one player's last-known cached data without collecting on request. Includes online/offline, lastSeenUtc and detail age. Run Players (summary) first."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Player details request succeeds', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const player = pm.response.json();",
+              "pm.test('Cache availability and online metadata are present', function () {",
+              "    pm.expect(player.characterDataAvailable).to.be.a('boolean');",
+              "    pm.expect(player.online).to.be.a('boolean');",
+              "    pm.expect(player.lastSeenUtc).to.be.a('string').and.not.empty;",
+              "    pm.expect(player.characterDataAgeSeconds).to.be.a('number');",
+              "});",
+              "pm.test('Online players have supplied character details', function () {",
+              "    if (player.online) pm.expect(player.characterDataAvailable).to.eql(true);",
+              "});",
+              "pm.test('Vitals, statuses, foods, and gear are present', function () {",
+              "    pm.expect(player.stats.health).to.be.a('number');",
+              "    pm.expect(player.stats.maxHealth).to.be.a('number');",
+              "    pm.expect(player.stats.stamina).to.be.a('number');",
+              "    pm.expect(player.stats.maxStamina).to.be.a('number');",
+              "    pm.expect(player.stats.eitr).to.be.a('number');",
+              "    pm.expect(player.stats.maxEitr).to.be.a('number');",
+              "    pm.expect(player.statuses).to.be.an('array');",
+              "    pm.expect(player.foods).to.be.an('array');",
+              "    pm.expect(player.equipment).to.be.an('array');",
+              "    pm.expect(player.followers).to.be.an('array');",
+              "});",
+              "player.statuses.concat(player.foods).forEach(function (effect) {",
+              "    pm.expect(effect.name).to.be.a('string').and.not.empty;",
+              "    pm.expect(effect.remainingSeconds).to.be.a('number');",
+              "    pm.expect(effect.hasDuration).to.be.a('boolean');",
+              "    pm.expect(effect.iconKey).to.be.a('string').and.not.empty;",
+              "});",
+              "player.equipment.forEach(function (item) {",
+              "    pm.expect(item.name).to.be.a('string').and.not.empty;",
+              "    pm.expect(item.slot).to.be.a('string').and.not.empty;",
+              "    pm.expect(item.quality).to.be.a('number');",
+              "    pm.expect(item.iconKey).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Followers",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/followers",
+        "description": "Lists last-known active followers. Stores the first stable follower ID for Follower details; an empty list clears it."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Follower list succeeds', function () { pm.response.to.have.status(200); });",
+            "const body = pm.response.json();",
+            "pm.test('Follower list and freshness fields are present', function () {",
+            "    pm.expect(body.followers).to.be.an('array');",
+            "    pm.expect(body.online).to.be.a('boolean');",
+            "    pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "});",
+            "body.followers.forEach(function (follower) {",
+            "    pm.expect(follower.followerId).to.be.a('string').and.not.empty;",
+            "    pm.expect(follower.name).to.be.a('string').and.not.empty;",
+            "    pm.expect(follower.position.x).to.be.a('number');",
+            "});",
+            "if (body.followers.length) { pm.collectionVariables.set('followerId', encodeURIComponent(body.followers[0].followerId)); }",
+            "else { pm.collectionVariables.unset('followerId'); }"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Follower details",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": ["if (!pm.collectionVariables.get('followerId')) { pm.execution.skipRequest(); }"]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Follower details succeed', function () { pm.response.to.have.status(200); });",
+            "const follower = pm.response.json().follower;",
+            "pm.test('Follower vitals and effects are present', function () {",
+            "    pm.expect(follower.stats.health).to.be.a('number');",
+            "    pm.expect(follower.stats.maxHealth).to.be.a('number');",
+            "    pm.expect(follower.statuses).to.be.an('array');",
+            "    ['stamina', 'maxStamina', 'eitr', 'maxEitr'].forEach(function (key) {",
+            "        pm.expect(follower.stats).not.to.have.property(key);",
+            "    });",
+            "});",
+            "follower.statuses.forEach(function (effect) {",
+            "    pm.expect(effect.remainingSeconds).to.be.a('number');",
+            "    pm.expect(effect.hasDuration).to.be.a('boolean');",
+            "    if (effect.shieldRemainingAbsorption !== undefined) pm.expect(effect.shieldRemainingAbsorption).to.be.a('number');",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/followers/{{followerId}}",
+        "description": "Full cached follower detail, including status timers and shield absorption when available. Skipped when Followers found no pets."
+      },
+      "response": []
+    }
+  ]
+}

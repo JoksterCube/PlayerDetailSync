@@ -1,0 +1,12 @@
+bin/
+obj/
+/packages/
+/environment.local.props
+.vscode/
+riderModule.iml
+/_ReSharper.Caches/
+.idea/
+.vs/
+*.sln.DotSettings.user
+*.zip
+/Thunderstore/README.md

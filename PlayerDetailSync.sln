@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35707.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlayerDetailSync", "PlayerDetailSync.csproj", "{C65E7B40-8E86-4D8A-8D90-A43C0D493035}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C65E7B40-8E86-4D8A-8D90-A43C0D493035}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C65E7B40-8E86-4D8A-8D90-A43C0D493035}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C65E7B40-8E86-4D8A-8D90-A43C0D493035}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C65E7B40-8E86-4D8A-8D90-A43C0D493035}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {16A31599-9D5C-4C8B-A47C-C480D94EC654}
+	EndGlobalSection
+EndGlobal

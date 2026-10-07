@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="environment.props" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{C65E7B40-8E86-4D8A-8D90-A43C0D493035}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>JoksterCube.PlayerDetailSync</RootNamespace>
+    <AssemblyName>PlayerDetailSync</AssemblyName>
+    <TargetFramework>net48</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Authors>JoksterCube</Authors>
+    <Company>JoksterCube</Company>
+    <Product>PlayerDetailSync</Product>
+    <Description>Server-hosted HTTP API for live Valheim player data.</Description>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExPath)\core\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_valheim">
+      <HintPath>$(PublicizedAssembliesPath)\assembly_valheim_publicized.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_utils">
+      <HintPath>$(PublicizedAssembliesPath)\assembly_utils_publicized.dll</HintPath>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExPath)\core\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>$(CorlibPath)\assembly_guiutils.dll</HintPath>
+    </Reference>
+    <Reference Include="ServerSync">
+      <HintPath>Libs\ServerSync.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="Splatform">
+      <HintPath>$(CorlibPath)\Splatform.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(CorlibPath)\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(CorlibPath)\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Api\HttpApiServer.cs" />
+    <Compile Include="Api\PlayerDetailSyncApi.cs" />
+    <Compile Include="Api\PlayerSnapshotStore.cs" />
+    <Compile Include="Api\ClientPlayerDataSync.cs" />
+    <Compile Include="Api\PlayerSnapshot.cs" />
+    <Compile Include="Common\Networking\VersionSync.cs" />
+    <Compile Include="Common\Toggle.cs" />
+    <Compile Include="Common\ToggleExtensions.cs" />
+    <Compile Include="Plugin.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Settings\ConfigInfo.cs" />
+    <Compile Include="Settings\ConfigOptions.cs" />
+    <Compile Include="Settings\Constants.cs" />
+    <Compile Include="Settings\PluginConfig.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Libs\ServerSync.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LICENSE.txt" />
+    <Content Include="README.md" />
+    <Content Include="Thunderstore\CHANGELOG.md" />
+    <Content Include="Thunderstore\manifest.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.48" />
+  </ItemGroup>
+  <Target Name="DeployPluginToServer" AfterTargets="ILRepacker" Condition="'$(DeployPlugin)' == 'true'">
+    <Error Condition="'$(DeployApiPassword)' == ''" Text="Set DeployApiPassword in the ignored environment.local.props file before deploying, or use -p:DeployPlugin=false to build without deployment." />
+    <Exec Command="pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Deploy-Server.ps1&quot; -AssemblyPath &quot;$(TargetPath)&quot;" />
+  </Target>
+</Project>
