@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using HarmonyLib;
 using JoksterCube.PlayerDetailSync.Api;
-using static JoksterCube.PlayerDetailSync.Settings.Constants.Plugin;
+using static JoksterCube.PlayerDetailSync.Settings.PluginConstants;
 
 namespace JoksterCube.PlayerDetailSync.Common.Networking;
 
@@ -120,16 +119,4 @@ internal static class VersionSync
         _waitingForServerVersion = false;
         ServerVersionMatched = false;
     }
-}
-
-[HarmonyPatch(typeof(ZNet), nameof(ZNet.OnNewConnection))]
-internal static class VersionSyncOnConnection
-{
-    private static void Prefix(ZNet __instance, ZNetPeer peer) => VersionSync.OnNewConnection(__instance, peer);
-}
-
-[HarmonyPatch(typeof(ZNet), nameof(ZNet.Disconnect))]
-internal static class VersionSyncOnDisconnect
-{
-    private static void Prefix(ZNet __instance, ZNetPeer peer) => VersionSync.OnDisconnect(__instance, peer);
 }

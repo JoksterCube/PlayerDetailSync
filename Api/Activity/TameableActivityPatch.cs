@@ -1,0 +1,13 @@
+using HarmonyLib;
+
+namespace JoksterCube.PlayerDetailSync.Api;
+
+[HarmonyPatch(typeof(Tameable), nameof(Tameable.Interact))]
+internal static class TameableActivityPatch
+{
+    private static void Postfix(Humanoid __0, bool __result)
+    {
+        if (__result && __0 is Player player)
+            PlayerActivityCapture.RecordAction(player, PlayerActivityStatus.TamingRanching);
+    }
+}

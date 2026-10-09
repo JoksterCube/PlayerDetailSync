@@ -2,9 +2,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="environment.props" />
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{C65E7B40-8E86-4D8A-8D90-A43C0D493035}</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>JoksterCube.PlayerDetailSync</RootNamespace>
     <AssemblyName>PlayerDetailSync</AssemblyName>
@@ -14,14 +11,6 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <Authors>JoksterCube</Authors>
-    <Company>JoksterCube</Company>
-    <Product>PlayerDetailSync</Product>
-    <Description>Server-hosted HTTP API for live Valheim player data.</Description>
-    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -71,19 +60,15 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Api\HttpApiServer.cs" />
-    <Compile Include="Api\PlayerDetailSyncApi.cs" />
-    <Compile Include="Api\PlayerSnapshotStore.cs" />
-    <Compile Include="Api\ClientPlayerDataSync.cs" />
-    <Compile Include="Api\PlayerSnapshot.cs" />
-    <Compile Include="Common\Networking\VersionSync.cs" />
-    <Compile Include="Common\Toggle.cs" />
-    <Compile Include="Common\ToggleExtensions.cs" />
+    <Compile Include="Api\**\*.cs" />
+    <Compile Include="Common\**\*.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings\ConfigInfo.cs" />
     <Compile Include="Settings\ConfigOptions.cs" />
-    <Compile Include="Settings\Constants.cs" />
+    <Compile Include="Settings\PluginConstants.cs" />
+    <Compile Include="Settings\Groups\HttpApiConfig.cs" />
+    <Compile Include="Settings\Groups\ActivityConfig.cs" />
     <Compile Include="Settings\PluginConfig.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -98,6 +83,40 @@
   <ItemGroup>
     <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.48" />
   </ItemGroup>
+  <Target Name="SyncThunderstoreReadme" BeforeTargets="PrepareForBuild">
+    <Copy SourceFiles="$(ProjectDir)README.md" DestinationFiles="$(ProjectDir)Thunderstore\README.md" />
+  </Target>
+  <Target Name="CopyBuildOutputToShared" AfterTargets="ILRepacker" Condition="'$(SharedBuildOutputPath)' != ''">
+    <MakeDir Directories="$(SharedBuildOutputPath)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(SharedBuildOutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="MakeThunderstorePackage" AfterTargets="ILRepacker" Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
+      <Output TaskParameter="Assemblies" ItemName="_ThunderstoreAssembly" />
+    </GetAssemblyIdentity>
+    <PropertyGroup>
+      <ThunderstoreAssemblyVersion>@(_ThunderstoreAssembly-&gt;'%(Version)')</ThunderstoreAssemblyVersion>
+      <ThunderstorePackageVersion>$(ThunderstoreAssemblyVersion.Split('.')[0]).$(ThunderstoreAssemblyVersion.Split('.')[1]).$(ThunderstoreAssemblyVersion.Split('.')[2])</ThunderstorePackageVersion>
+      <ThunderstorePackageName>$(AssemblyName)_v$(ThunderstorePackageVersion)</ThunderstorePackageName>
+      <ThunderstorePackageDirectory>$(BaseIntermediateOutputPath)$(Configuration)\ThunderstorePackage</ThunderstorePackageDirectory>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(ProjectDir)Thunderstore\manifest.json')" Text="Thunderstore manifest is missing." />
+    <Error Condition="!Exists('$(ProjectDir)Thunderstore\CHANGELOG.md')" Text="Thunderstore changelog is missing." />
+    <Error Condition="!Exists('$(ProjectDir)Thunderstore\README.md')" Text="Thunderstore README is missing." />
+    <RemoveDir Directories="$(ThunderstorePackageDirectory)" />
+    <MakeDir Directories="$(ThunderstorePackageDirectory)" />
+    <ItemGroup>
+      <ThunderstorePackageFiles Include="$(TargetPath)" />
+      <ThunderstorePackageFiles Include="$(ProjectDir)Thunderstore\manifest.json" />
+      <ThunderstorePackageFiles Include="$(ProjectDir)Thunderstore\CHANGELOG.md" />
+      <ThunderstorePackageFiles Include="$(ProjectDir)Thunderstore\README.md" />
+      <ThunderstorePackageFiles Include="$(ProjectDir)Thunderstore\icon.png" Condition="Exists('$(ProjectDir)Thunderstore\icon.png')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ThunderstorePackageFiles)" DestinationFolder="$(ThunderstorePackageDirectory)" />
+    <ZipDirectory SourceDirectory="$(ThunderstorePackageDirectory)" DestinationFile="$(ProjectDir)Thunderstore\$(ThunderstorePackageName).zip" Overwrite="true" />
+    <RemoveDir Directories="$(ThunderstorePackageDirectory)" />
+    <Message Importance="High" Condition="!Exists('$(ProjectDir)Thunderstore\icon.png')" Text="Thunderstore package created without icon.png; add a 256x256 Thunderstore icon before publishing." />
+  </Target>
   <Target Name="DeployPluginToServer" AfterTargets="ILRepacker" Condition="'$(DeployPlugin)' == 'true'">
     <Error Condition="'$(DeployApiPassword)' == ''" Text="Set DeployApiPassword in the ignored environment.local.props file before deploying, or use -p:DeployPlugin=false to build without deployment." />
     <Exec Command="pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Deploy-Server.ps1&quot; -AssemblyPath &quot;$(TargetPath)&quot;" />

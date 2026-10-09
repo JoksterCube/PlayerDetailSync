@@ -9,7 +9,7 @@ using JoksterCube.PlayerDetailSync.Common;
 using JoksterCube.PlayerDetailSync.Common.Networking;
 using JoksterCube.PlayerDetailSync.Settings;
 using ServerSync;
-using static JoksterCube.PlayerDetailSync.Settings.Constants.Plugin;
+using static JoksterCube.PlayerDetailSync.Settings.PluginConstants;
 
 namespace JoksterCube.PlayerDetailSync;
 

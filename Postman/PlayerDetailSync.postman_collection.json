@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f4bd8cae-84ea-4936-a27e-a4a6b33fa31d",
     "name": "PlayerDetailSync API",
-    "description": "Smoke tests for the PlayerDetailSync server API. Set apiPassword locally. Run Players (summary), Player details, Followers, then Follower details when a follower is available.",
+    "description": "Smoke tests for the PlayerDetailSync server API. Set apiPassword locally. Run Players (summary), Player details, category requests, and Followers for complete follower records.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -147,7 +147,7 @@
           }
         ],
         "url": "{{baseUrl}}/api/v1/players/{{playerId}}",
-        "description": "Returns one player's last-known cached data without collecting on request. Includes online/offline, lastSeenUtc and detail age. Run Players (summary) first."
+        "description": "Returns player identity, position, and data freshness only. Run category requests for character and other details."
       },
       "event": [
         {
@@ -168,29 +168,12 @@
               "pm.test('Online players have supplied character details', function () {",
               "    if (player.online) pm.expect(player.characterDataAvailable).to.eql(true);",
               "});",
-              "pm.test('Vitals, statuses, foods, and gear are present', function () {",
-              "    pm.expect(player.stats.health).to.be.a('number');",
-              "    pm.expect(player.stats.maxHealth).to.be.a('number');",
-              "    pm.expect(player.stats.stamina).to.be.a('number');",
-              "    pm.expect(player.stats.maxStamina).to.be.a('number');",
-              "    pm.expect(player.stats.eitr).to.be.a('number');",
-              "    pm.expect(player.stats.maxEitr).to.be.a('number');",
-              "    pm.expect(player.statuses).to.be.an('array');",
-              "    pm.expect(player.foods).to.be.an('array');",
-              "    pm.expect(player.equipment).to.be.an('array');",
-              "    pm.expect(player.followers).to.be.an('array');",
-              "});",
-              "player.statuses.concat(player.foods).forEach(function (effect) {",
-              "    pm.expect(effect.name).to.be.a('string').and.not.empty;",
-              "    pm.expect(effect.remainingSeconds).to.be.a('number');",
-              "    pm.expect(effect.hasDuration).to.be.a('boolean');",
-              "    pm.expect(effect.iconKey).to.be.a('string').and.not.empty;",
-              "});",
-              "player.equipment.forEach(function (item) {",
-              "    pm.expect(item.name).to.be.a('string').and.not.empty;",
-              "    pm.expect(item.slot).to.be.a('string').and.not.empty;",
-              "    pm.expect(item.quality).to.be.a('number');",
-              "    pm.expect(item.iconKey).to.be.a('string').and.not.empty;",
+              "pm.test('Player detail is compact', function () {",
+              "    pm.expect(player.playerId).to.be.a('string').and.not.empty;",
+              "    pm.expect(player.position.x).to.be.a('number');",
+              "    ['statuses', 'foods', 'equipment', 'followers', 'currentMount', 'lastMount', 'stats'].forEach(function (key) {",
+              "        pm.expect(player).not.to.have.property(key);",
+              "    });",
               "});"
             ]
           }
@@ -199,12 +182,163 @@
       "response": []
     },
     {
+      "name": "Character data",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/character",
+        "description": "Returns statuses, foods, and equipped gear for one player."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "pm.expect(body.statuses).to.be.an('array');",
+            "pm.expect(body.foods).to.be.an('array');",
+            "pm.expect(body.equipment).to.be.an('array');"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Mount",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/mount",
+        "description": "Returns the single retained mount record and whether the player is riding it."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "pm.expect(body.riding).to.be.a('boolean');",
+            "if (body.mount) {",
+            "    pm.expect(body.mount.name).to.be.a('string').and.not.empty;",
+            "    pm.expect(body.mount.species).to.be.a('string').and.not.empty;",
+            "    pm.expect(body.mount.stats.health).to.be.a('number');",
+            "}"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Ship",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/ship",
+        "description": "Returns the single retained ship record and whether the player is aboard."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "pm.expect(body.aboard).to.be.a('boolean');",
+            "if (body.ship) {",
+            "    pm.expect(body.ship.name).to.be.a('string').and.not.empty;",
+            "    pm.expect(body.ship.speed).to.be.a('number');",
+            "}"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Player stats",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/stats",
+        "description": "Returns current vitals and selected native lifetime counters/distances."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "pm.expect(body.vitals.health).to.be.a('number');",
+            "pm.expect(body.lifetime).to.be.an('array');",
+            "body.lifetime.forEach(function (stat) { pm.expect(stat.value).to.be.a('number'); });"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Private keys",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/keys",
+        "description": "Returns Valheim per-player unique keys, not cryptographic keys."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "pm.expect(body.privateKeys).to.be.an('array');"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
+      "name": "Player activity",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/activity",
+        "description": "Returns the primary and detected activity states; offline players have no current activity."
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.response.to.have.status(200);",
+            "const body = pm.response.json();",
+            "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
+            "if (body.activity) pm.expect(body.activity.activeStates).to.be.an('array');"
+          ]
+        }
+      }],
+      "response": []
+    },
+    {
       "name": "Followers",
       "request": {
         "method": "GET",
         "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
         "url": "{{baseUrl}}/api/v1/players/{{playerId}}/followers",
-        "description": "Lists last-known active followers. Stores the first stable follower ID for Follower details; an empty list clears it."
+        "description": "Lists last-known active followers with their full stats, status effects, and positions."
       },
       "event": [{
         "listen": "test",
@@ -215,58 +349,25 @@
             "const body = pm.response.json();",
             "pm.test('Follower list and freshness fields are present', function () {",
             "    pm.expect(body.followers).to.be.an('array');",
-            "    pm.expect(body.online).to.be.a('boolean');",
             "    pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
+            "    ['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
             "});",
             "body.followers.forEach(function (follower) {",
             "    pm.expect(follower.followerId).to.be.a('string').and.not.empty;",
             "    pm.expect(follower.name).to.be.a('string').and.not.empty;",
             "    pm.expect(follower.position.x).to.be.a('number');",
-            "});",
-            "if (body.followers.length) { pm.collectionVariables.set('followerId', encodeURIComponent(body.followers[0].followerId)); }",
-            "else { pm.collectionVariables.unset('followerId'); }"
-          ]
-        }
-      }],
-      "response": []
-    },
-    {
-      "name": "Follower details",
-      "event": [{
-        "listen": "prerequest",
-        "script": {
-          "type": "text/javascript",
-          "exec": ["if (!pm.collectionVariables.get('followerId')) { pm.execution.skipRequest(); }"]
-        }
-      }, {
-        "listen": "test",
-        "script": {
-          "type": "text/javascript",
-          "exec": [
-            "pm.test('Follower details succeed', function () { pm.response.to.have.status(200); });",
-            "const follower = pm.response.json().follower;",
-            "pm.test('Follower vitals and effects are present', function () {",
             "    pm.expect(follower.stats.health).to.be.a('number');",
             "    pm.expect(follower.stats.maxHealth).to.be.a('number');",
             "    pm.expect(follower.statuses).to.be.an('array');",
-            "    ['stamina', 'maxStamina', 'eitr', 'maxEitr'].forEach(function (key) {",
-            "        pm.expect(follower.stats).not.to.have.property(key);",
+            "    follower.statuses.forEach(function (effect) {",
+            "        pm.expect(effect.remainingSeconds).to.be.a('number');",
+            "        pm.expect(effect.hasDuration).to.be.a('boolean');",
             "    });",
             "});",
-            "follower.statuses.forEach(function (effect) {",
-            "    pm.expect(effect.remainingSeconds).to.be.a('number');",
-            "    pm.expect(effect.hasDuration).to.be.a('boolean');",
-            "    if (effect.shieldRemainingAbsorption !== undefined) pm.expect(effect.shieldRemainingAbsorption).to.be.a('number');",
-            "});"
+            ""
           ]
         }
       }],
-      "request": {
-        "method": "GET",
-        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
-        "url": "{{baseUrl}}/api/v1/players/{{playerId}}/followers/{{followerId}}",
-        "description": "Full cached follower detail, including status timers and shield absorption when available. Skipped when Followers found no pets."
-      },
       "response": []
     }
   ]

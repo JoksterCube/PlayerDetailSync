@@ -1,16 +1,16 @@
 <Project>
+    <Import Project="environment.local.props" Condition="Exists('environment.local.props')" />
     <PropertyGroup>
         <ValheimGamePath Condition="'$(ValheimGamePath)' == ''">$(VALHEIM_GAME_PATH)</ValheimGamePath>
         <BepInExPath>$(ValheimGamePath)\BepInEx</BepInExPath>
         <CorlibPath>$(ValheimGamePath)\valheim_Data\Managed</CorlibPath>
         <PublicizedAssembliesPath>$(ValheimGamePath)\valheim_Data\Managed\publicized_assemblies</PublicizedAssembliesPath>
-        <DeployPlugin Condition="'$(DeployPlugin)' == ''">true</DeployPlugin>
+        <DeployPlugin Condition="'$(DeployPlugin)' == ''">false</DeployPlugin>
         <DeployRemoteStagingFile>.PlayerDetailSync.dll.stage</DeployRemoteStagingFile>
         <DeployRemoteConfigStagingFile>.PlayerDetailSync.cfg.stage</DeployRemoteConfigStagingFile>
         <DeployComposeService>valheim</DeployComposeService>
         <DeployContainerPluginDirectory>/config/bepinex/plugins</DeployContainerPluginDirectory>
         <DeployContainerConfigDirectory>/config/bepinex</DeployContainerConfigDirectory>
-        <DeployApiPassword></DeployApiPassword>
+        <DeployApiPassword Condition="'$(DeployApiPassword)' == ''"></DeployApiPassword>
     </PropertyGroup>
-    <Import Project="environment.local.props" Condition="Exists('environment.local.props')" />
 </Project>

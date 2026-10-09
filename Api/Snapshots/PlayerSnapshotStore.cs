@@ -99,6 +99,11 @@ internal static class PlayerSnapshotStore
             }
             else
             {
+                if (previousById.TryGetValue(livePlayer.PlayerId, out PlayerRecord? previousVehicleData))
+                {
+                    livePlayer.Mount ??= previousVehicleData.Mount;
+                    livePlayer.Ship ??= previousVehicleData.Ship;
+                }
                 livePlayer.Online = true;
                 livePlayer.LastSeenUtc = updatedAtUtc;
                 merged.Add(livePlayer);
@@ -183,15 +188,4 @@ internal static class PlayerSnapshotStore
         }
     }
 
-    private sealed class PendingWrite
-    {
-        internal string Path { get; }
-        internal PlayerSnapshot Snapshot { get; }
-
-        internal PendingWrite(string path, PlayerSnapshot snapshot)
-        {
-            Path = path;
-            Snapshot = snapshot;
-        }
-    }
 }

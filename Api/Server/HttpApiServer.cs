@@ -160,46 +160,104 @@ internal sealed class HttpApiServer : IDisposable
                 WriteResponse(context.Response, 200, ToPlayerResponse(player));
                 return;
             }
-            if (segments[1] != "followers" || segments.Length > 3)
-            {
-                WriteResponse(context.Response, 404, new ApiErrorResponse { Error = "not_found" });
-                return;
-            }
-            if (segments.Length == 2)
-            {
-                WriteResponse(context.Response, 200, new FollowersResponse
-                {
-                    PlayerId = player.PlayerId,
-                    Online = player.Online,
-                    LastSeenUtc = player.LastSeenUtc,
-                    CharacterDataAvailable = player.CharacterDataAvailable,
-                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
-                    Followers = ToFollowerSummaries(player.Followers)
-                });
-                return;
-            }
-            string followerId = Uri.UnescapeDataString(segments[2]);
-            foreach (FollowerRecord follower in player.Followers)
-            {
-                if (!string.Equals(follower.FollowerId, followerId, StringComparison.Ordinal)) continue;
-                WriteResponse(context.Response, 200, new FollowerResponse
-                {
-                    PlayerId = player.PlayerId,
-                    Online = player.Online,
-                    LastSeenUtc = player.LastSeenUtc,
-                    CharacterDataAvailable = player.CharacterDataAvailable,
-                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
-                    Follower = follower
-                });
-                return;
-            }
-            WriteResponse(context.Response, 404, new ApiErrorResponse { Error = "follower_not_found" });
+            HandlePlayerCategoryRequest(context.Response, player, segments);
             return;
         }
 
         WriteResponse(context.Response, 404, new ApiErrorResponse
         {
             Error = "not_found"
+        });
+    }
+
+    private static void HandlePlayerCategoryRequest(HttpListenerResponse response, PlayerRecord player, string[] segments)
+    {
+        if (segments.Length < 2 || segments.Length > 3)
+        {
+            WriteResponse(response, 404, new ApiErrorResponse { Error = "not_found" });
+            return;
+        }
+
+        switch (segments[1])
+        {
+            case "character":
+                if (segments.Length != 2) break;
+                WriteResponse(response, 200, new PlayerCharacterResponse
+                {
+                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+                    Statuses = ToTimedPlayerDataResponses(player.Statuses),
+                    Foods = ToTimedPlayerDataResponses(player.Foods),
+                    Equipment = ToEquippedGearResponses(player.Equipment)
+                });
+                return;
+            case "followers":
+                if (segments.Length != 2) break;
+                HandleFollowerRequest(response, player);
+                return;
+            case "mount":
+                if (segments.Length != 2) break;
+                HandleMountRequest(response, player);
+                return;
+            case "ship":
+                if (segments.Length != 2) break;
+                HandleShipRequest(response, player);
+                return;
+            case "stats":
+                if (segments.Length != 2) break;
+                WriteResponse(response, 200, new PlayerStatsCategoryResponse
+                {
+                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+                    Vitals = ToPlayerStatsResponse(player.Stats),
+                    LifetimeStats = player.LifetimeStats
+                });
+                return;
+            case "keys":
+                if (segments.Length != 2) break;
+                WriteResponse(response, 200, new PlayerKeysResponse
+                {
+                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+                    PrivateKeys = player.PrivateKeys
+                });
+                return;
+            case "activity":
+                if (segments.Length != 2) break;
+                WriteResponse(response, 200, new PlayerActivityResponse
+                {
+                    CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+                    Activity = player.Online ? player.Activity : null
+                });
+                return;
+        }
+
+        WriteResponse(response, 404, new ApiErrorResponse { Error = "not_found" });
+    }
+
+    private static void HandleFollowerRequest(HttpListenerResponse response, PlayerRecord player)
+    {
+        WriteResponse(response, 200, new FollowersResponse
+        {
+            CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+            Followers = player.Followers
+        });
+    }
+
+    private static void HandleMountRequest(HttpListenerResponse response, PlayerRecord player)
+    {
+        WriteResponse(response, 200, new MountResponse
+        {
+            CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+            Riding = player.Riding,
+            Mount = player.Mount
+        });
+    }
+
+    private static void HandleShipRequest(HttpListenerResponse response, PlayerRecord player)
+    {
+        WriteResponse(response, 200, new ShipResponse
+        {
+            CharacterDataAgeSeconds = player.CharacterDataAgeSeconds,
+            Aboard = player.Aboard,
+            Ship = player.Ship
         });
     }
 
@@ -236,31 +294,8 @@ internal sealed class HttpApiServer : IDisposable
                 X = player.X,
                 Y = player.Y,
                 Z = player.Z
-            },
-            Statuses = ToTimedPlayerDataResponses(player.Statuses),
-            Foods = ToTimedPlayerDataResponses(player.Foods),
-            Stats = ToPlayerStatsResponse(player.Stats),
-            Equipment = ToEquippedGearResponses(player.Equipment),
-            Followers = ToFollowerSummaries(player.Followers)
+            }
         };
-    }
-
-    private static FollowerSummaryResponse[] ToFollowerSummaries(IReadOnlyList<FollowerRecord> followers)
-    {
-        var result = new FollowerSummaryResponse[followers.Count];
-        for (int index = 0; index < followers.Count; index++)
-        {
-            FollowerRecord follower = followers[index];
-            result[index] = new FollowerSummaryResponse
-            {
-                FollowerId = follower.FollowerId,
-                Name = follower.Name,
-                Species = follower.Species,
-                Position = follower.Position,
-                Level = follower.Level
-            };
-        }
-        return result;
     }
 
     private static TimedPlayerDataResponse[] ToTimedPlayerDataResponses(IReadOnlyList<TimedPlayerData> data)
@@ -337,244 +372,4 @@ internal sealed class HttpApiServer : IDisposable
         if (_listener.IsListening) _listener.Stop();
         _listener.Close();
     }
-}
-
-[Serializable]
-[DataContract]
-internal sealed class HealthResponse
-{
-    [DataMember(Name = "status", Order = 1)]
-    public string Status { get; set; } = "";
-
-    [DataMember(Name = "updatedAtUtc", Order = 2)]
-    public string UpdatedAtUtc { get; set; } = "";
-
-    [DataMember(Name = "connectedPlayerCount", Order = 3)]
-    public int ConnectedPlayerCount { get; set; }
-
-    [DataMember(Name = "trackedPlayerCount", Order = 4)]
-    public int TrackedPlayerCount { get; set; }
-}
-
-[Serializable]
-[DataContract]
-internal sealed class ApiErrorResponse
-{
-    [DataMember(Name = "error", Order = 1)]
-    public string Error { get; set; } = "";
-
-    [DataMember(Name = "message", Order = 2, EmitDefaultValue = false)]
-    public string Message { get; set; } = "";
-}
-
-[Serializable]
-[DataContract]
-internal sealed class PlayersResponse
-{
-    [DataMember(Name = "updatedAtUtc", Order = 1)]
-    public string UpdatedAtUtc { get; set; } = "";
-
-    [DataMember(Name = "players", Order = 2)]
-    public PlayerSummaryResponse[] Players { get; set; } = [];
-}
-
-[Serializable]
-[DataContract]
-internal sealed class PlayerSummaryResponse
-{
-    [DataMember(Name = "playerId", Order = 1)]
-    public string PlayerId { get; set; } = "";
-
-    [DataMember(Name = "steamUserId", Order = 6)]
-    public string SteamUserId { get; set; } = "";
-
-    [DataMember(Name = "name", Order = 2)]
-    public string Name { get; set; } = "";
-
-    [DataMember(Name = "online", Order = 3)]
-    public bool Online { get; set; }
-
-    [DataMember(Name = "lastSeenUtc", Order = 4)]
-    public string LastSeenUtc { get; set; } = "";
-
-    [DataMember(Name = "position", Order = 5)]
-    public PlayerPosition Position { get; set; } = new();
-}
-
-[Serializable]
-[DataContract]
-internal sealed class PlayerResponse
-{
-    [DataMember(Name = "playerId", Order = 1)]
-    public string PlayerId { get; set; } = "";
-
-    [DataMember(Name = "steamUserId", Order = 12)]
-    public string SteamUserId { get; set; } = "";
-
-    [DataMember(Name = "name", Order = 2)]
-    public string Name { get; set; } = "";
-
-    [DataMember(Name = "online", Order = 3)]
-    public bool Online { get; set; }
-
-    [DataMember(Name = "lastSeenUtc", Order = 4)]
-    public string LastSeenUtc { get; set; } = "";
-
-    [DataMember(Name = "characterDataAvailable", Order = 5)]
-    public bool CharacterDataAvailable { get; set; }
-
-    [DataMember(Name = "characterDataAgeSeconds", Order = 6)]
-    public float CharacterDataAgeSeconds { get; set; }
-
-    [DataMember(Name = "position", Order = 7)]
-    public PlayerPosition Position { get; set; } = new();
-
-    [DataMember(Name = "statuses", Order = 8)]
-    public TimedPlayerDataResponse[] Statuses { get; set; } = [];
-
-    [DataMember(Name = "foods", Order = 9)]
-    public TimedPlayerDataResponse[] Foods { get; set; } = [];
-
-    [DataMember(Name = "stats", Order = 10)]
-    public PlayerStatsResponse Stats { get; set; } = new();
-
-    [DataMember(Name = "equipment", Order = 11)]
-    public EquippedGearResponse[] Equipment { get; set; } = [];
-
-    [DataMember(Name = "followers", Order = 13)]
-    public FollowerSummaryResponse[] Followers { get; set; } = [];
-}
-
-[DataContract]
-internal sealed class FollowerSummaryResponse
-{
-    [DataMember(Name = "followerId", Order = 1)]
-    public string FollowerId { get; set; } = "";
-
-    [DataMember(Name = "name", Order = 2)]
-    public string Name { get; set; } = "";
-
-    [DataMember(Name = "species", Order = 3)]
-    public string Species { get; set; } = "";
-
-    [DataMember(Name = "position", Order = 4)]
-    public PlayerPosition Position { get; set; } = new();
-
-    [DataMember(Name = "level", Order = 5)]
-    public int Level { get; set; }
-}
-
-[DataContract]
-internal sealed class FollowersResponse
-{
-    [DataMember(Name = "playerId", Order = 1)]
-    public string PlayerId { get; set; } = "";
-
-    [DataMember(Name = "online", Order = 2)]
-    public bool Online { get; set; }
-
-    [DataMember(Name = "lastSeenUtc", Order = 3)]
-    public string LastSeenUtc { get; set; } = "";
-
-    [DataMember(Name = "characterDataAvailable", Order = 4)]
-    public bool CharacterDataAvailable { get; set; }
-
-    [DataMember(Name = "characterDataAgeSeconds", Order = 5)]
-    public float CharacterDataAgeSeconds { get; set; }
-
-    [DataMember(Name = "followers", Order = 6)]
-    public FollowerSummaryResponse[] Followers { get; set; } = [];
-}
-
-[DataContract]
-internal sealed class FollowerResponse
-{
-    [DataMember(Name = "playerId", Order = 1)]
-    public string PlayerId { get; set; } = "";
-
-    [DataMember(Name = "online", Order = 2)]
-    public bool Online { get; set; }
-
-    [DataMember(Name = "lastSeenUtc", Order = 3)]
-    public string LastSeenUtc { get; set; } = "";
-
-    [DataMember(Name = "characterDataAvailable", Order = 4)]
-    public bool CharacterDataAvailable { get; set; }
-
-    [DataMember(Name = "characterDataAgeSeconds", Order = 5)]
-    public float CharacterDataAgeSeconds { get; set; }
-
-    [DataMember(Name = "follower", Order = 6)]
-    public FollowerRecord Follower { get; set; } = new();
-}
-
-[Serializable]
-[DataContract]
-internal sealed class TimedPlayerDataResponse
-{
-    [DataMember(Name = "name", Order = 1)]
-    public string Name { get; set; } = "";
-
-    [DataMember(Name = "remainingSeconds", Order = 2)]
-    public float RemainingSeconds { get; set; }
-
-    [DataMember(Name = "iconKey", Order = 3)]
-    public string IconKey { get; set; } = "";
-
-    [DataMember(Name = "hasDuration", Order = 4)]
-    public bool HasDuration { get; set; }
-}
-
-[Serializable]
-[DataContract]
-internal sealed class PlayerStatsResponse
-{
-    [DataMember(Name = "health", Order = 1)]
-    public float Health { get; set; }
-
-    [DataMember(Name = "maxHealth", Order = 2)]
-    public float MaxHealth { get; set; }
-
-    [DataMember(Name = "stamina", Order = 3)]
-    public float Stamina { get; set; }
-
-    [DataMember(Name = "maxStamina", Order = 4)]
-    public float MaxStamina { get; set; }
-
-    [DataMember(Name = "eitr", Order = 5)]
-    public float Eitr { get; set; }
-
-    [DataMember(Name = "maxEitr", Order = 6)]
-    public float MaxEitr { get; set; }
-}
-
-[Serializable]
-[DataContract]
-internal sealed class EquippedGearResponse
-{
-    [DataMember(Name = "name", Order = 1)]
-    public string Name { get; set; } = "";
-
-    [DataMember(Name = "slot", Order = 2)]
-    public string Slot { get; set; } = "";
-
-    [DataMember(Name = "quality", Order = 3)]
-    public int Quality { get; set; }
-
-    [DataMember(Name = "iconKey", Order = 4)]
-    public string IconKey { get; set; } = "";
-}
-
-[Serializable]
-[DataContract]
-internal sealed class PlayerPosition
-{
-    [DataMember(Name = "x", Order = 1)]
-    public float X { get; set; }
-
-    [DataMember(Name = "y", Order = 2)]
-    public float Y { get; set; }
-
-    [DataMember(Name = "z", Order = 3)]
-    public float Z { get; set; }
 }

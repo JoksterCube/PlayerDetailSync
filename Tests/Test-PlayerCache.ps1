@@ -2,12 +2,20 @@ param([string]$Configuration = "Debug")
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
-[xml]$environment = Get-Content (Join-Path $root 'environment.props') -Raw
-$managed = Join-Path $environment.Project.PropertyGroup.ValheimGamePath 'valheim_Data\Managed'
+$gamePath = $env:VALHEIM_GAME_PATH
+if ([string]::IsNullOrWhiteSpace($gamePath)) {
+    $localPropsPath = Join-Path $root 'environment.local.props'
+    if (Test-Path $localPropsPath) {
+        [xml]$localProps = Get-Content $localPropsPath -Raw
+        $gamePath = [string]$localProps.Project.PropertyGroup.ValheimGamePath
+    }
+}
+if ([string]::IsNullOrWhiteSpace($gamePath)) { throw 'Set VALHEIM_GAME_PATH to the installed Valheim directory.' }
+$managed = Join-Path $gamePath 'valheim_Data\Managed'
 foreach ($name in @('UnityEngine.CoreModule.dll', 'UnityEngine.dll', 'assembly_utils.dll', 'assembly_valheim.dll', 'Splatform.dll')) {
     [Reflection.Assembly]::LoadFrom((Join-Path $managed $name)) | Out-Null
 }
-$bepInExCore = Join-Path $environment.Project.PropertyGroup.ValheimGamePath 'BepInEx\core'
+$bepInExCore = Join-Path $gamePath 'BepInEx\core'
 foreach ($name in @('BepInEx.dll', '0Harmony.dll')) {
     [Reflection.Assembly]::LoadFrom((Join-Path $bepInExCore $name)) | Out-Null
 }
@@ -20,7 +28,16 @@ $timedType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.TimedPlayerData
 $dataType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerDataSnapshot', $true)
 $gearType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.EquippedGear', $true)
 $followerType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.FollowerRecord', $true)
+$characterStatusCaptureType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.CharacterStatusCapture', $true)
 $followerStatsType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.FollowerStats', $true)
+$mountType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.MountRecord', $true)
+$mountStatsType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.MountStats', $true)
+$shipType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.ShipRecord', $true)
+$statisticType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerStatistic', $true)
+$statisticNameType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerStatisticName', $true)
+$statisticUnitType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerStatisticUnit', $true)
+$activityType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerActivity', $true)
+$activityStatusType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerActivityStatus', $true)
 $validatorType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerReportValidator', $true)
 $retryType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.ClientRefreshRetry', $true)
 $storeType = $assembly.GetType('JoksterCube.PlayerDetailSync.Api.PlayerSnapshotStore', $true)
@@ -87,6 +104,45 @@ try {
     $foods = [Array]::CreateInstance($timedType, 1)
     $foods.SetValue($food, 0)
     $record.Foods = $foods
+    $mount = [Activator]::CreateInstance($mountType)
+    $mount.MountId = '123:789'
+    $mount.Name = 'Rex'
+    $mount.Species = 'Lox'
+    $mount.Position.X = 12
+    $mount.Level = 3
+    $mount.Tamed = $true
+    $mount.Hungry = $false
+    $mount.Stats = [Activator]::CreateInstance($mountStatsType)
+    $mount.Stats.Health = 650
+    $mount.Stats.MaxHealth = 1000
+    $mount.Stats.Stamina = 80
+    $mount.Stats.MaxStamina = 100
+    $record.Mount = $mount
+    $record.Riding = $true
+    $ship = [Activator]::CreateInstance($shipType)
+    $ship.ShipId = '456:789'
+    $ship.Name = 'VikingShip'
+    $ship.Position.Z = -22
+    $ship.Speed = 3.5
+    $ship.SpeedSetting = 'Full'
+    $ship.SailUp = $true
+    $ship.AtHelm = $true
+    $record.Ship = $ship
+    $record.Aboard = $true
+    $deathCount = [Activator]::CreateInstance($statisticType)
+    $deathCount.Name = [Enum]::Parse($statisticNameType, 'Deaths')
+    $deathCount.Value = 2
+    $deathCount.Unit = [Enum]::Parse($statisticUnitType, 'Count')
+    $lifetimeStats = [Array]::CreateInstance($statisticType, 1)
+    $lifetimeStats.SetValue($deathCount, 0)
+    $record.LifetimeStats = $lifetimeStats
+    $record.PrivateKeys = [string[]]@('defeated_eikthyr', 'found_haldor')
+    $activity = [Activator]::CreateInstance($activityType)
+    $activity.State = [Enum]::Parse($activityStatusType, 'Sailing')
+    $activity.ActiveStates = [Array]::CreateInstance($activityStatusType, 1)
+    $activity.ActiveStates.SetValue([Enum]::Parse($activityStatusType, 'Sailing'), 0)
+    $activity.ObservedAtUtc = [DateTime]::UtcNow.ToString('O')
+    $record.Activity = $activity
     $follower = [Activator]::CreateInstance($followerType)
     $follower.FollowerId = '123:456'
     $follower.Name = 'Thora'
@@ -106,13 +162,20 @@ try {
     $shieldFlags = [Reflection.BindingFlags]'Instance,Public,NonPublic'
     $shieldType.GetField('m_totalAbsorbDamage', $shieldFlags).SetValue($shield, [float]200)
     $shieldType.GetField('m_damage', $shieldFlags).SetValue($shield, [float]50)
-    $captureShield = $followerType.GetMethod('CaptureShield', $flags)
+    $captureShield = $characterStatusCaptureType.GetMethod('CaptureShield', $flags)
     Invoke-CacheMethod $captureShield @($bubble, $shield) | Out-Null
     Assert-Cache ($bubble.ShieldRemainingAbsorption -eq 150 -and $bubble.ShieldMaxAbsorption -eq 200) 'Original game assembly shield fields were not captured.'
     $shieldType.GetField('m_damage', $shieldFlags).SetValue($shield, [float]250)
     Invoke-CacheMethod $captureShield @($bubble, $shield) | Out-Null
     Assert-Cache ($bubble.ShieldRemainingAbsorption -eq 0) 'Depleted shield absorption was not clamped.'
     $bubble.ShieldRemainingAbsorption = 150
+    $mountStatuses = [Array]::CreateInstance($timedType, 1)
+    $mountStatuses.SetValue($bubble, 0)
+    $mount.Statuses = $mountStatuses
+    $mountAgingFlags = [Reflection.BindingFlags]'Instance,NonPublic'
+    $ageMount = $mountType.GetMethod('WithElapsedSeconds', $mountAgingFlags)
+    $agedMount = $ageMount.Invoke($mount, [object[]]@([float]10))
+    Assert-Cache ($agedMount.Statuses[0].RemainingSeconds -eq 20 -and $agedMount.Statuses[0].ShieldRemainingAbsorption -eq 150) 'Mount status aging changed its timer or shield absorption.'
     $followerStatuses = [Array]::CreateInstance($timedType, 1)
     $followerStatuses.SetValue($bubble, 0)
     $follower.Statuses = $followerStatuses
@@ -127,9 +190,7 @@ try {
         $responseSerializer.WriteObject($responseStream, $response)
         $responseJson = [Text.Encoding]::UTF8.GetString($responseStream.ToArray()) | ConvertFrom-Json
         Assert-Cache ($responseJson.steamUserId -ceq $record.SteamUserId) 'Detailed API response lost Steam identity.'
-        Assert-Cache ($responseJson.followers[0].followerId -ceq '123:456') 'Player details lost follower summary.'
-        Assert-Cache ($responseJson.followers[0].name -ceq 'Thora' -and $responseJson.followers[0].species -ceq 'Skelett') 'Follower summary confused custom name with species.'
-        Assert-Cache ($null -eq $responseJson.followers[0].statuses) 'Player details exposed full followers instead of summaries.'
+        Assert-Cache ($null -eq $responseJson.currentMount -and $null -eq $responseJson.followers -and $null -eq $responseJson.stats) 'Player identity response still embeds category data.'
     }
     finally { $responseStream.Dispose() }
     $portProbe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
@@ -143,19 +204,57 @@ try {
         Assert-Cache ($httpType.GetMethod('Start', [Reflection.BindingFlags]'Instance,NonPublic').Invoke($server, $null)) 'Local test API did not start.'
         $baseUri = "http://127.0.0.1:$port/api/v1/players/123456"
         $headers = @{ 'X-API-Password' = 'cache-regression' }
-        $list = Invoke-RestMethod "$baseUri/followers" -Headers $headers
-        Assert-Cache ($list.followers.Count -eq 1 -and $list.online -and $list.characterDataAvailable) 'Follower list lost summary or freshness metadata.'
-        $detail = Invoke-RestMethod "$baseUri/followers/$([Uri]::EscapeDataString($follower.FollowerId))" -Headers $headers
-        Assert-Cache ($detail.follower.name -ceq 'Thora' -and $detail.follower.species -ceq 'Skelett') 'Follower detail confused custom name with species.'
-        Assert-Cache ($detail.follower.stats.health -eq 120 -and $detail.follower.position.x -eq -42) 'Follower detail lost health or position.'
         $playerDetail = Invoke-RestMethod $baseUri -Headers $headers
-        foreach ($key in @('stamina', 'maxStamina', 'eitr', 'maxEitr')) {
-            Assert-Cache ($key -notin $detail.follower.stats.PSObject.Properties.Name) "Follower stats still expose '$key'."
-            Assert-Cache ($key -in $playerDetail.stats.PSObject.Properties.Name) "Player stats lost '$key'."
+        Assert-Cache ($playerDetail.name -ceq $record.Name -and $null -eq $playerDetail.statuses) 'Player identity route included expanded character data.'
+        $followerProperties = @($playerDetail.PSObject.Properties.Name | Where-Object { $_ -match 'follower' })
+        Assert-Cache ($followerProperties.Count -eq 0) 'Player details exposed follower information.'
+        $characterData = Invoke-RestMethod "$baseUri/character" -Headers $headers
+        Assert-Cache ($characterData.foods[0].name -ceq 'Test food' -and $characterData.equipment.Count -eq 0) 'Character data route lost foods or gear.'
+        $categoryResponses = @($characterData)
+        $list = Invoke-RestMethod "$baseUri/followers" -Headers $headers
+        Assert-Cache ($list.followers.Count -eq 1 -and $list.characterDataAgeSeconds -ge 0) 'Follower list lost detail or age metadata.'
+        $categoryResponses += $list
+        $followerDetails = $list.followers[0]
+        Assert-Cache ($followerDetails.name -ceq 'Thora' -and $followerDetails.species -ceq 'Skelett') 'Follower list confused custom name with species.'
+        Assert-Cache ($followerDetails.stats.health -eq 120 -and $followerDetails.position.x -eq -42) 'Follower list lost health or position.'
+        Assert-Cache ($followerDetails.statuses[0].shieldRemainingAbsorption -eq 150 -and $followerDetails.statuses[0].remainingSeconds -eq 30) 'Follower list lost status details or shield absorption.'
+        $mountState = Invoke-RestMethod "$baseUri/mount" -Headers $headers
+        Assert-Cache ($mountState.riding -and $mountState.mount.name -ceq 'Rex' -and $mountState.mount.stats.stamina -eq 80) 'Mount endpoint lost riding state or mount details.'
+        Assert-Cache ($mountState.mount.statuses[0].shieldRemainingAbsorption -eq 150) 'Mount endpoint lost shield absorption.'
+        $categoryResponses += $mountState
+        $shipState = Invoke-RestMethod "$baseUri/ship" -Headers $headers
+        Assert-Cache ($shipState.aboard -and $shipState.ship.name -ceq 'VikingShip' -and $shipState.ship.speed -eq 3.5) 'Ship endpoint lost aboard state or ship details.'
+        $categoryResponses += $shipState
+        $pluralMountRoute = Invoke-WebRequest "$baseUri/mounts" -Headers $headers -SkipHttpErrorCheck
+        Assert-Cache ($pluralMountRoute.StatusCode -eq 404) 'Plural mount route is still available.'
+        $mountDetailRoute = Invoke-WebRequest "$baseUri/mount/current" -Headers $headers -SkipHttpErrorCheck
+        Assert-Cache ($mountDetailRoute.StatusCode -eq 404) 'Nested mount detail route is still available.'
+        $pluralShipRoute = Invoke-WebRequest "$baseUri/ships" -Headers $headers -SkipHttpErrorCheck
+        Assert-Cache ($pluralShipRoute.StatusCode -eq 404) 'Plural ship route is still available.'
+        $shipDetailRoute = Invoke-WebRequest "$baseUri/ship/current" -Headers $headers -SkipHttpErrorCheck
+        Assert-Cache ($shipDetailRoute.StatusCode -eq 404) 'Nested ship detail route is still available.'
+        $playerStats = Invoke-RestMethod "$baseUri/stats" -Headers $headers
+        Assert-Cache ($playerStats.vitals.health -eq 75 -and $playerStats.lifetime[0].name -ceq 'deaths' -and $playerStats.lifetime[0].value -eq 2) 'Stats endpoint lost vitals or lifetime statistics.'
+        $categoryResponses += $playerStats
+        $privateKeys = Invoke-RestMethod "$baseUri/keys" -Headers $headers
+        Assert-Cache ($privateKeys.privateKeys.Count -eq 2 -and $privateKeys.privateKeys[0] -ceq 'defeated_eikthyr') 'Private key endpoint lost per-player game keys.'
+        $categoryResponses += $privateKeys
+        $currentActivity = Invoke-RestMethod "$baseUri/activity" -Headers $headers
+        Assert-Cache ($currentActivity.activity.state -ceq 'sailing') 'Activity endpoint lost the current state.'
+        $categoryResponses += $currentActivity
+        $repeatedPlayerMetadata = @('playerId', 'online', 'lastSeenUtc', 'characterDataAvailable')
+        foreach ($categoryResponse in $categoryResponses) {
+            Assert-Cache ($categoryResponse.characterDataAgeSeconds -ge 0) 'Category response lost character data age.'
+            foreach ($propertyName in $repeatedPlayerMetadata) {
+                Assert-Cache ($propertyName -notin $categoryResponse.PSObject.Properties.Name) "Category response repeated '$propertyName'."
+            }
         }
-        Assert-Cache ($detail.follower.statuses[0].shieldRemainingAbsorption -eq 150 -and $detail.follower.statuses[0].remainingSeconds -eq 30) 'Follower detail lost bubble absorption or timer.'
-        $missing = Invoke-WebRequest "$baseUri/followers/missing" -Headers $headers -SkipHttpErrorCheck
-        Assert-Cache ($missing.StatusCode -eq 404 -and ($missing.Content | ConvertFrom-Json).error -eq 'follower_not_found') 'Missing follower did not return 404.'
+        foreach ($key in @('stamina', 'maxStamina', 'eitr', 'maxEitr')) {
+            Assert-Cache ($key -notin $followerDetails.stats.PSObject.Properties.Name) "Follower stats still expose '$key'."
+            Assert-Cache ($key -in $playerStats.vitals.PSObject.Properties.Name) "Player stats lost '$key'."
+        }
+        $removedFollowerDetailRoute = Invoke-WebRequest "$baseUri/followers/missing" -Headers $headers -SkipHttpErrorCheck
+        Assert-Cache ($removedFollowerDetailRoute.StatusCode -eq 404 -and ($removedFollowerDetailRoute.Content | ConvertFrom-Json).error -eq 'not_found') 'Per-follower detail route was not removed.'
         $missingPlayer = Invoke-WebRequest "http://127.0.0.1:$port/api/v1/players/999/followers" -Headers $headers -SkipHttpErrorCheck
         Assert-Cache ($missingPlayer.StatusCode -eq 404) 'Missing follower owner did not return 404.'
         $invalid = Invoke-WebRequest "http://127.0.0.1:$port/api/v1/players/invalid/followers" -Headers $headers -SkipHttpErrorCheck
@@ -168,6 +267,8 @@ try {
     finally { $server.Dispose() }
     $online = Invoke-CacheMethod $mergeMethod @((New-Snapshot @($record)))
     Assert-Cache ($online.Players.Length -eq 1 -and $online.Players[0].Online) 'Online player was not cached.'
+    Assert-Cache ($online.Players[0].Mount.Name -ceq 'Rex' -and $online.Players[0].Riding) 'Online cache did not record the mount and riding state.'
+    Assert-Cache ($online.Players[0].Ship.Name -ceq 'VikingShip' -and $online.Players[0].Aboard -and $online.Players[0].PrivateKeys.Length -eq 2) 'Online cache did not record the ship, aboard state, or private keys.'
 
     $cacheFile = Join-Path $directory 'JoksterCube.PlayerDetailSync.players.json'
     if (-not (Test-Path $cacheFile)) {
@@ -178,12 +279,19 @@ try {
     Assert-Cache ($saved.players[0].stats.health -eq 75) 'Serialized cache lost player vitals.'
     Assert-Cache ($saved.players[0].steamUserId -eq $record.SteamUserId) 'Serialized cache lost Steam identity.'
     Assert-Cache ($saved.players[0].followers[0].statuses[0].shieldRemainingAbsorption -eq 150) 'Cache lost pet protection bubble.'
+    Assert-Cache ($saved.players[0].mount.name -ceq 'Rex' -and $saved.players[0].riding) 'Serialized cache lost mount details or riding state.'
+    Assert-Cache ($saved.players[0].mount.statuses[0].shieldRemainingAbsorption -eq 150) 'Cache lost mount shield absorption.'
+    Assert-Cache ($saved.players[0].ship.name -ceq 'VikingShip' -and $saved.players[0].aboard -and $saved.players[0].lifetimeStats[0].value -eq 2) 'Serialized cache lost ship state or lifetime stats.'
+    Assert-Cache ($saved.players[0].privateKeys.Count -eq 2 -and $saved.players[0].activity.state -ceq 'sailing') 'Serialized cache lost private keys or activity.'
+    Assert-Cache ($saved.players[0].lifetimeStats[0].name -ceq 'deaths' -and $saved.players[0].lifetimeStats[0].unit -ceq 'count') 'Serialized statistic enums changed their JSON values.'
 
     Invoke-CacheMethod $loadMethod @($directory, $logger, $logger) | Out-Null
     $restored = $currentProperty.GetValue($null)
     Assert-Cache ($restored.Players.Length -eq 1 -and -not $restored.Players[0].Online) 'Reload must restore players as offline.'
     Assert-Cache ($restored.Players[0].Stats.Health -eq 75) 'Reload lost last-known health.'
     Assert-Cache ($restored.Players[0].SteamUserId -eq $record.SteamUserId) 'Reload lost Steam identity.'
+    Assert-Cache ($restored.Players[0].Mount.Name -ceq 'Rex' -and -not $restored.Players[0].Riding) 'Offline cache did not retain the mount with riding false.'
+    Assert-Cache ($restored.Players[0].Ship.Name -ceq 'VikingShip' -and -not $restored.Players[0].Aboard) 'Offline cache did not retain the ship with aboard false.'
     Assert-Cache ($restored.Players[0].Foods[0].RemainingSeconds -eq 300) 'Reload changed last-known offline food timer.'
     Assert-Cache ($restored.Players[0].Followers[0].Statuses[0].RemainingSeconds -eq 30) 'Reload changed last-known offline follower timer.'
 
@@ -197,11 +305,21 @@ try {
     Assert-Cache ($joined.Players[0].SteamUserId -eq $record.SteamUserId) 'Rejoin lost last-known Steam identity.'
     Assert-Cache ($joined.Players[0].Stats.Health -eq 75 -and $joined.Players[0].X -eq 42) 'Rejoin did not retain details and update live position.'
     Assert-Cache ($joined.Players[0].Followers.Length -eq 1) 'Missing rejoin report discarded cached followers.'
+    Assert-Cache ($joined.Players[0].Mount.Name -ceq 'Rex' -and -not $joined.Players[0].Riding) 'Missing client data lost the retained mount or marked the player as riding.'
 
     $offline = Invoke-CacheMethod $mergeMethod @((New-Snapshot @()))
     Assert-Cache ($offline.Players.Length -eq 1 -and -not $offline.Players[0].Online) 'Disconnect removed last-known data.'
     Assert-Cache ($offline.Players[0].SteamUserId -eq $record.SteamUserId) 'Disconnect lost Steam identity.'
     Assert-Cache ($offline.Players[0].Stats.Health -eq 75) 'Offline record lost its cached vitals.'
+
+    $dismount = [Activator]::CreateInstance($recordType)
+    $dismount.PlayerId = '123456'
+    $dismount.Name = 'Cache test player'
+    $dismount.Online = $true
+    $dismount.CharacterDataAvailable = $true
+    $dismounted = Invoke-CacheMethod $mergeMethod @((New-Snapshot @($dismount)))
+    Assert-Cache ($dismounted.Players[0].Mount.Name -ceq 'Rex' -and -not $dismounted.Players[0].Riding) 'Dismount did not retain one mount with riding false.'
+    Assert-Cache ($dismounted.Players[0].Ship.Name -ceq 'VikingShip' -and -not $dismounted.Players[0].Aboard) 'Leaving a ship did not retain one ship with aboard false.'
 
     $duplicateLive = Invoke-CacheMethod $mergeMethod @((New-Snapshot @($rejoin, $rejoin)))
     Assert-Cache ($duplicateLive.Players.Length -eq 1) 'Duplicate live character IDs were not collapsed.'
@@ -230,7 +348,22 @@ try {
     Assert-Cache ($migrated.Players.Length -eq 1 -and $migrated.Players[0].PlayerId -eq '123456') 'Temporary session record survived stable character identification.'
 
     $validate = $validatorType.GetMethod('GetError', $flags)
+    foreach ($statusName in @(
+        'Dead', 'RecoveringCorpse', 'Drowning', 'Freezing', 'Burning', 'FightingBoss',
+        'SiegingFortress', 'HuntingSerpent', 'DefendingBase', 'InPvP', 'InCombat',
+        'DungeonDelving', 'LostAtSea', 'Portaling', 'CartHauling', 'Terraforming',
+        'Mining', 'Logging', 'Farming', 'TamingRanching', 'Cooking', 'Brewing', 'Smelting',
+        'Crafting', 'SortingChests', 'Trading', 'StalkingSneaking', 'Hunting', 'Encumbered',
+        'Resting', 'IdlingAtBase', 'IdlingAtOutpost', 'IdlingInDanger', 'Exploring', 'Adventuring'
+    )) {
+        Assert-Cache ([Enum]::IsDefined($activityStatusType, $statusName)) "Activity status '$statusName' is missing."
+    }
     $report = [Activator]::CreateInstance($dataType)
+    $report.Mount = $mount
+    $report.Ship = $ship
+    $report.LifetimeStats = $lifetimeStats
+    $report.PrivateKeys = $record.PrivateKeys
+    $report.Activity = $activity
     $statusFactory = $timedType.GetMethod('FromStatus', $flags)
     $effect = $statusFactory.Invoke($null, [object[]]@('Untimed status', [float]-10, [float]0, 'test_status', $null))
     Assert-Cache (-not $effect.HasDuration -and $effect.RemainingSeconds -eq 0) 'Untimed Valheim status was not normalized.'
@@ -250,6 +383,14 @@ try {
     $report.Followers = $followers
     $validationError = Invoke-CacheMethod $validate @($report)
     Assert-Cache ($null -eq $validationError) 'Valid untimed status or modded quality gear was rejected.'
+    $report.Activity.ActiveStates = [Array]::CreateInstance($activityStatusType, [Enum]::GetValues($activityStatusType).Length)
+    [Enum]::GetValues($activityStatusType).CopyTo($report.Activity.ActiveStates, 0)
+    $validationError = Invoke-CacheMethod $validate @($report)
+    Assert-Cache ($null -eq $validationError) 'Expanded activity state list was rejected.'
+    $report.Activity = $null
+    $validationError = Invoke-CacheMethod $validate @($report)
+    Assert-Cache ($null -eq $validationError) 'Disabled activity collection report was rejected.'
+    $report.Activity = $activity
     $serializer = [Runtime.Serialization.Json.DataContractJsonSerializer]::new($dataType)
     $stream = [IO.MemoryStream]::new()
     try {
@@ -258,6 +399,8 @@ try {
         $roundTrip = $serializer.ReadObject($stream)
         Assert-Cache (-not $roundTrip.Statuses[0].HasDuration -and $roundTrip.Equipment[0].Quality -eq 20) 'Report JSON lost untimed status or gear.'
         Assert-Cache ($roundTrip.Followers[0].FollowerId -ceq '123:456') 'Client report JSON lost follower ID.'
+        Assert-Cache ($roundTrip.Mount.Name -ceq 'Rex' -and $roundTrip.Mount.Stats.Stamina -eq 80) 'Client report JSON lost mount details.'
+        Assert-Cache ($roundTrip.Ship.Name -ceq 'VikingShip') 'Client report JSON lost ship details.'
         $agingMethod = $dataType.GetMethod('WithElapsedSeconds', [Reflection.BindingFlags]'Instance,NonPublic')
         $aged = $agingMethod.Invoke($roundTrip, [object[]]@([float]60))
         Assert-Cache (-not $aged.Statuses[0].HasDuration -and $aged.Statuses[0].RemainingSeconds -eq 0) 'Timer aging lost untimed status semantics.'
@@ -279,15 +422,31 @@ try {
     $report.Followers = [Array]::CreateInstance($followerType, 65)
     Assert-Cache ((Invoke-CacheMethod $validate @($report)) -eq 'followers exceeds 64 entries') 'Unbounded followers were accepted.'
     $report.Followers = $followers
+    $mount.Stats.Stamina = [float]::NaN
+    Assert-Cache ((Invoke-CacheMethod $validate @($report)) -like 'mount.stats.stamina=*') 'Invalid mount stamina was accepted.'
+    $mount.Stats.Stamina = 80
+    $report.Followers = $followers
     $legacy = ($saved | ConvertTo-Json -Depth 20) | ConvertFrom-Json
     $legacy.players[0].PSObject.Properties.Remove('steamUserId')
     $legacy.players[0].PSObject.Properties.Remove('followers')
     $legacy.players[0].foods[0].PSObject.Properties.Remove('hasDuration')
+    $legacyMount = $legacy.players[0].mount
+    $legacyShip = $legacy.players[0].ship
+    $legacy.players[0].PSObject.Properties.Remove('mount')
+    $legacy.players[0].PSObject.Properties.Remove('riding')
+    $legacy.players[0].PSObject.Properties.Remove('ship')
+    $legacy.players[0].PSObject.Properties.Remove('aboard')
+    $legacy.players[0] | Add-Member -NotePropertyName currentMount -NotePropertyValue $null
+    $legacy.players[0] | Add-Member -NotePropertyName lastMount -NotePropertyValue $legacyMount
+    $legacy.players[0] | Add-Member -NotePropertyName currentShip -NotePropertyValue $null
+    $legacy.players[0] | Add-Member -NotePropertyName lastShip -NotePropertyValue $legacyShip
     $legacyStream = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes(($legacy | ConvertTo-Json -Depth 20)))
     try {
         $legacySerializer = [Runtime.Serialization.Json.DataContractJsonSerializer]::new($snapshotType)
         $legacySnapshot = $legacySerializer.ReadObject($legacyStream)
         Assert-Cache ($legacySnapshot.Players[0].Foods[0].HasDuration) 'Old cache food timer lost its duration semantics.'
+        Assert-Cache ($legacySnapshot.Players[0].Mount.Name -ceq 'Rex' -and -not $legacySnapshot.Players[0].Riding) 'Old current/last mount cache fields did not migrate.'
+        Assert-Cache ($legacySnapshot.Players[0].Ship.Name -ceq 'VikingShip' -and -not $legacySnapshot.Players[0].Aboard) 'Old current/last ship cache fields did not migrate.'
         $offlineMethod = $recordType.GetMethod('WithOfflineAge', [Reflection.BindingFlags]'Instance,NonPublic')
         $legacyOffline = $offlineMethod.Invoke($legacySnapshot.Players[0], [object[]]@([float]0))
         Assert-Cache ($legacyOffline.SteamUserId -eq '') 'Old cache did not default missing Steam identity to an empty string.'
@@ -338,7 +497,8 @@ try {
     $record.Followers = [Array]::CreateInstance($followerType, 0)
     $cleared = Invoke-CacheMethod $mergeMethod @((New-Snapshot @($record)))
     Assert-Cache ($cleared.Players[0].Followers.Length -eq 0) 'A fresh empty follower report retained old pets.'
-    Write-Output 'PASS: follower summaries/details, authentication, resources, shield timers, cache retention, validation, and legacy defaults.'
+    Write-Output 'PASS: full follower lists, authentication, resources, shield timers, cache retention, validation, and legacy defaults.'
+    Write-Output 'PASS: single mount/ship records, riding/aboard state, singular endpoints, cache, dismount, and offline handling.'
     Write-Output 'PASS: refresh retries start immediately, back off to 30 seconds, and reset.'
     Write-Output 'PASS: untimed status and modded gear accepted; invalid fields identified precisely.'
     Write-Output 'PASS: background save, reload, offline retention, and reconnect merge.'
