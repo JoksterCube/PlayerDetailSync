@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using static JoksterCube.PlayerDetailSync.Settings.PluginConstants;
+using static JoksterCube.PlayerDetailSync.Settings.Constants.Plugin;
 
 [assembly: AssemblyTitle(ModName)]
 [assembly: AssemblyDescription(Description)]

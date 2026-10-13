@@ -67,25 +67,27 @@ internal static class PlayerDetailCapture
         PlayerProfile? profile = Game.instance?.GetPlayerProfile();
         if (profile == null) return [];
 
-        IReadOnlyList<(PlayerStatisticName Name, PlayerStatType Type, PlayerStatisticUnit Unit)> definitions =
-            LifetimeStatisticCatalog.All;
-        var stats = new PlayerStatistic[definitions.Count];
-        for (int index = 0; index < definitions.Count; index++)
+        var stats = new List<PlayerStatistic>();
+        foreach (PlayerStatType type in Enum.GetValues(typeof(PlayerStatType)))
         {
-            (PlayerStatisticName name, PlayerStatType type, PlayerStatisticUnit unit) = definitions[index];
-            stats[index] = new PlayerStatistic
+            if (type == PlayerStatType.Count || type == PlayerStatType.None) continue;
+
+            float value = profile.GetStat(type);
+            if (!(value > 0f)) continue;
+
+            stats.Add(new PlayerStatistic
             {
-                Name = name,
-                Value = Math.Max(0f, profile.GetStat(type)),
-                Unit = unit
-            };
+                Name = type.ToString(),
+                Value = value
+            });
         }
-        return stats;
+        return [.. stats];
     }
 
     internal static string[] CapturePrivateKeys(Player player)
     {
         List<string> keys = player.GetUniqueKeys();
+        keys.RemoveAll(string.IsNullOrWhiteSpace);
         keys.Sort(StringComparer.Ordinal);
         return [.. keys];
     }

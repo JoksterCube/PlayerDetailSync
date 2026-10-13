@@ -62,13 +62,18 @@
   <ItemGroup>
     <Compile Include="Api\**\*.cs" />
     <Compile Include="Common\**\*.cs" />
+    <Compile Include="Patches\**\*.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings\ConfigInfo.cs" />
+    <Compile Include="Settings\ConfigurationManagerAttributes.cs" />
     <Compile Include="Settings\ConfigOptions.cs" />
-    <Compile Include="Settings\PluginConstants.cs" />
+    <Compile Include="Settings\Constants.cs" />
     <Compile Include="Settings\Groups\HttpApiConfig.cs" />
     <Compile Include="Settings\Groups\ActivityConfig.cs" />
+    <Compile Include="Settings\Groups\WebhookConfig.cs" />
+    <Compile Include="Settings\Groups\DiscordWebhookConfig.cs" />
+    <Compile Include="Settings\Groups\WebhookFormat.cs" />
     <Compile Include="Settings\PluginConfig.cs" />
   </ItemGroup>
   <ItemGroup>

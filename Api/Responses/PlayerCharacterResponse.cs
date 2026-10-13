@@ -13,6 +13,9 @@ namespace JoksterCube.PlayerDetailSync.Api;
 [DataContract]
 internal sealed class PlayerCharacterResponse : PlayerDataCategoryResponse
 {
+    [DataMember(Name = "vitals", Order = 5)]
+    public PlayerStatsResponse Vitals { get; set; } = new();
+
     [DataMember(Name = "statuses", Order = 6)]
     public TimedPlayerDataResponse[] Statuses { get; set; } = [];
 

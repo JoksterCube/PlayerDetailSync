@@ -45,12 +45,16 @@ internal sealed class PlayerDataSnapshot
     [DataMember(Name = "activity", Order = 11)]
     public PlayerActivity? Activity { get; set; }
 
+    [DataMember(Name = "steamName", Order = 12)]
+    public string SteamName { get; set; } = "";
+
     [OnDeserializing]
     private void OnDeserializing(StreamingContext context)
     {
         Followers = [];
         LifetimeStats = [];
         PrivateKeys = [];
+        SteamName = "";
         Activity = new PlayerActivity { ActiveStates = [] };
     }
 
@@ -59,6 +63,7 @@ internal sealed class PlayerDataSnapshot
 
     internal static PlayerDataSnapshot Capture(Player player)
     {
+        IReadOnlyList<Character> characters = Character.GetAllCharacters();
         var statuses = new List<TimedPlayerData>();
         SEMan? statusManager = player.GetSEMan();
         IReadOnlyList<StatusEffect>? statusEffects = statusManager?.GetStatusEffects();
@@ -113,6 +118,7 @@ internal sealed class PlayerDataSnapshot
         return new PlayerDataSnapshot
         {
             CharacterPlayerId = player.GetPlayerID(),
+            SteamName = ReferenceEquals(player, Player.m_localPlayer) ? CaptureSteamName() : "",
             Statuses = [.. statuses],
             Foods = [.. foods],
             Stats = new PlayerStats
@@ -125,7 +131,7 @@ internal sealed class PlayerDataSnapshot
                 MaxEitr = Math.Max(0f, player.GetMaxEitr())
             },
             Equipment = [.. equipment],
-            Followers = FollowerRecord.Capture(player),
+            Followers = FollowerRecord.Capture(player, characters),
             Mount = PlayerDetailCapture.CaptureMount(player),
             LifetimeStats = PlayerDetailCapture.CaptureLifetimeStats(),
             PrivateKeys = PlayerDetailCapture.CapturePrivateKeys(player),
@@ -135,9 +141,16 @@ internal sealed class PlayerDataSnapshot
                     player,
                     PluginConfig.ActivityStatusCollection.Value.IsOn(),
                     PluginConfig.ActivityConfirmationPeriod.Value,
-                    statusEffects)
+                    statusEffects,
+                    characters)
                 : null
         };
+    }
+
+    private static string CaptureSteamName()
+    {
+        Splatform.ILocalUser? user = Splatform.PlatformManager.DistributionPlatform?.LocalUser;
+        return user != null && user.PlatformUserID.m_platform == "Steam" ? user.DisplayName ?? "" : "";
     }
 
     internal PlayerDataSnapshot WithElapsedSeconds(float elapsedSeconds)
@@ -154,6 +167,7 @@ internal sealed class PlayerDataSnapshot
             PrivateKeys = PrivateKeys,
             Ship = Ship,
             Activity = Activity,
+            SteamName = SteamName,
             CharacterPlayerId = CharacterPlayerId,
             AgeSeconds = elapsedSeconds
         };

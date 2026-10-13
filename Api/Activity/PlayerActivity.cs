@@ -5,7 +5,7 @@ namespace JoksterCube.PlayerDetailSync.Api;
 [DataContract]
 internal sealed class PlayerActivity
 {
-    private PlayerActivityStatus _state = PlayerActivityStatus.Idling;
+    private PlayerActivityStatus _state = PlayerActivityStatus.IdlingAtBase;
     private PlayerActivityStatus[]? _activeStates = [];
     private bool _hasState;
     private bool _hasActiveStates;
@@ -38,10 +38,10 @@ internal sealed class PlayerActivity
     [IgnoreDataMember]
     internal bool HasActiveStates => _hasActiveStates;
 
-    [DataMember(Name = "state", Order = 1)]
+    [DataMember(Name = "state", Order = 1, EmitDefaultValue = false)]
     private string? SerializedState
     {
-        get => EnumWireValue.ToWireValue(State);
+        get => _hasState ? EnumWireValue.ToWireValue(State) : null;
         set => State = EnumWireValue.Parse<PlayerActivityStatus>(value);
     }
 

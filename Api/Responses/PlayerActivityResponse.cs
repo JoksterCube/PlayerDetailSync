@@ -13,6 +13,9 @@ namespace JoksterCube.PlayerDetailSync.Api;
 [DataContract]
 internal sealed class PlayerActivityResponse : PlayerDataCategoryResponse
 {
-    [DataMember(Name = "activity", Order = 6, EmitDefaultValue = false)]
+    [DataMember(Name = "activity", Order = 6)]
     public PlayerActivity? Activity { get; set; }
+
+    [DataMember(Name = "lastActivity", Order = 7)]
+    public PlayerActivity? LastActivity { get; set; }
 }

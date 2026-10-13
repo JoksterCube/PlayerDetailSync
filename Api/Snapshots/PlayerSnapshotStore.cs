@@ -59,7 +59,10 @@ internal static class PlayerSnapshotStore
                     offlineById[player.PlayerId] = player.WithOfflineAge(elapsedSeconds);
             }
 
-            _current = new PlayerSnapshot(DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), new List<PlayerRecord>(offlineById.Values));
+            string updatedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            var offlinePlayers = new List<PlayerRecord>(offlineById.Values);
+            EntityAssociations.Reconcile(offlinePlayers, saved.Players, updatedAtUtc);
+            _current = new PlayerSnapshot(updatedAtUtc, offlinePlayers);
             _logInfo($"Loaded {_current.Players.Length} cached player record(s).");
         }
         catch (Exception exception)
@@ -101,8 +104,11 @@ internal static class PlayerSnapshotStore
             {
                 if (previousById.TryGetValue(livePlayer.PlayerId, out PlayerRecord? previousVehicleData))
                 {
+                    livePlayer.RetainActivityHistory(previousVehicleData);
                     livePlayer.Mount ??= previousVehicleData.Mount;
                     livePlayer.Ship ??= previousVehicleData.Ship;
+                    if (string.IsNullOrEmpty(livePlayer.SteamName)) livePlayer.SteamName = previousVehicleData.SteamName;
+                    if (string.IsNullOrEmpty(livePlayer.SteamUserId)) livePlayer.SteamUserId = previousVehicleData.SteamUserId;
                 }
                 livePlayer.Online = true;
                 livePlayer.LastSeenUtc = updatedAtUtc;
@@ -116,6 +122,7 @@ internal static class PlayerSnapshotStore
                 merged.Add(previous.WithOfflineAge(elapsedSeconds));
         }
 
+        EntityAssociations.Reconcile(merged, _current.Players, updatedAtUtc);
         _current = new PlayerSnapshot(updatedAtUtc, merged.ToArray());
         QueueSave(_current);
         return _current;

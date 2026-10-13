@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using BepInEx.Configuration;
 using ServerSync;
 
@@ -18,9 +20,22 @@ internal static class ConfigOptions
     {
         ConfigDescription description = configInfo.Description as ConfigDescription
             ?? new ConfigDescription(configInfo.Description.ToString());
+
+        List<object> tags = [.. description.Tags];
+        if (!tags.OfType<ConfigurationManagerAttributes>().Any())
+            tags.Add(new ConfigurationManagerAttributes { Browsable = true });
+
+        description = new ConfigDescription(
+            $"[Server only] {description.Description}",
+            description.AcceptableValues,
+            tags.ToArray());
+
         ConfigEntry<T> entry = _config.Bind(configInfo.Group, configInfo.Name, configInfo.DefaultValue, description);
         SyncedConfigEntry<T> syncedEntry = _configSync.AddConfigEntry(entry);
         syncedEntry.SynchronizedConfig = configInfo.IsServerConfig;
         return entry;
     }
+
+    internal static void SetClientVisibility(bool isClient) =>
+        ConfigurationManagerAttributes.SetClientVisibility(isClient);
 }

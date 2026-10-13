@@ -6,6 +6,9 @@ namespace JoksterCube.PlayerDetailSync.Settings.Groups;
 internal static class HttpApiConfig
 {
     internal const string Group = "1 - HTTP API";
+    private const string DefaultBindAddress = "";
+    private const int DefaultPort = 8785;
+    private const float DefaultRefreshIntervalSeconds = 5f;
 
     internal static readonly ConfigInfo<Toggle> LockConfiguration = new(
         Group,
@@ -24,8 +27,8 @@ internal static class HttpApiConfig
     internal static readonly ConfigInfo<string> BindAddress = new(
         Group,
         "Bind Address",
-        "Use 127.0.0.1 for local access or 0.0.0.0 to allow remote connections.",
-        "127.0.0.1",
+        "Leave empty to allow remote connections, use local for local-only access, or enter an IP address.",
+        DefaultBindAddress,
         false);
 
     internal static readonly ConfigInfo<int> Port = new(
@@ -34,7 +37,7 @@ internal static class HttpApiConfig
         new ConfigDescription(
             "HTTP port for the API.",
             new AcceptableValueRange<int>(1024, 65535)),
-        8785,
+        DefaultPort,
         false);
 
     internal static readonly ConfigInfo<string> Password = new(
@@ -50,6 +53,6 @@ internal static class HttpApiConfig
         new ConfigDescription(
             "Seconds between automatic player snapshots, cache saves, and client reports (1-60 seconds). Joins and missing data bypass this interval with bounded retries.",
             new AcceptableValueRange<float>(1f, 60f)),
-        5f,
+        DefaultRefreshIntervalSeconds,
         true);
 }

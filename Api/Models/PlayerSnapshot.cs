@@ -58,6 +58,8 @@ internal sealed class PlayerSnapshot
 
                 PlayerDataSnapshot? clientData = ClientPlayerDataSync.GetLatest(peer.m_uid);
                 long numericPlayerId = character != null ? character.GetPlayerID() : clientData?.CharacterPlayerId ?? 0;
+                if (numericPlayerId <= 0)
+                    numericPlayerId = GetNetworkPlayerId(ZDOMan.instance?.GetZDO(peer.m_characterID));
                 if (numericPlayerId <= 0) continue;
                 string playerId = numericPlayerId.ToString(CultureInfo.InvariantCulture);
                 if (!playerIds.Add(playerId)) continue;
@@ -98,6 +100,9 @@ internal sealed class PlayerSnapshot
 
         return new PlayerSnapshot(capturedAtUtc, players);
     }
+
+    internal static long GetNetworkPlayerId(ZDO? characterData) =>
+        characterData?.GetLong(ZDOVars.s_playerID) ?? 0;
 
     internal static string GetSteamUserId(string hostName)
     {

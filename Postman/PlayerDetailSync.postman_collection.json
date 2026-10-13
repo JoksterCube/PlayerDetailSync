@@ -27,7 +27,19 @@
       "key": "followerId",
       "value": "",
       "type": "string",
-      "description": "URL-encoded stable creature ID populated by Followers. Select a player with followers first."
+      "description": "URL-encoded network creature ID populated by All followers. IDs may change on world reload."
+    },
+    {
+      "key": "mountId",
+      "value": "",
+      "type": "string",
+      "description": "URL-encoded mount ID populated by All mounts."
+    },
+    {
+      "key": "shipId",
+      "value": "",
+      "type": "string",
+      "description": "URL-encoded ship ID populated by All ships."
     }
   ],
   "item": [
@@ -187,7 +199,7 @@
         "method": "GET",
         "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
         "url": "{{baseUrl}}/api/v1/players/{{playerId}}/character",
-        "description": "Returns statuses, foods, and equipped gear for one player."
+        "description": "Returns current vitals, statuses, foods, and equipped gear for one player."
       },
       "event": [{
         "listen": "test",
@@ -199,6 +211,7 @@
             "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
             "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
             "pm.expect(body.statuses).to.be.an('array');",
+            "['health', 'maxHealth', 'stamina', 'maxStamina', 'eitr', 'maxEitr'].forEach(function (key) { pm.expect(body.vitals[key]).to.be.a('number'); });",
             "pm.expect(body.foods).to.be.an('array');",
             "pm.expect(body.equipment).to.be.an('array');"
           ]
@@ -267,7 +280,7 @@
         "method": "GET",
         "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
         "url": "{{baseUrl}}/api/v1/players/{{playerId}}/stats",
-        "description": "Returns current vitals and selected native lifetime counters/distances."
+        "description": "Returns positive native lifetime statistics; current vitals are in Character data."
       },
       "event": [{
         "listen": "test",
@@ -278,7 +291,7 @@
             "const body = pm.response.json();",
             "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
             "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
-            "pm.expect(body.vitals.health).to.be.a('number');",
+            "pm.expect(body).not.to.have.property('vitals');",
             "pm.expect(body.lifetime).to.be.an('array');",
             "body.lifetime.forEach(function (stat) { pm.expect(stat.value).to.be.a('number'); });"
           ]
@@ -315,7 +328,7 @@
         "method": "GET",
         "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
         "url": "{{baseUrl}}/api/v1/players/{{playerId}}/activity",
-        "description": "Returns the primary and detected activity states; offline players have no current activity."
+        "description": "Returns current activity and lastActivity with observation times. Offline players have current state offline and retained classified history."
       },
       "event": [{
         "listen": "test",
@@ -326,7 +339,8 @@
             "const body = pm.response.json();",
             "pm.expect(body.characterDataAgeSeconds).to.be.a('number');",
             "['playerId', 'online', 'lastSeenUtc', 'characterDataAvailable'].forEach(function (key) { pm.expect(body).not.to.have.property(key); });",
-            "if (body.activity) pm.expect(body.activity.activeStates).to.be.an('array');"
+            "pm.expect(body).to.have.property('lastActivity');",
+            "[body.activity, body.lastActivity].forEach(function (activity) { if (activity) { pm.expect(activity.state).to.be.a('string'); pm.expect(activity.activeStates).to.be.an('array'); pm.expect(activity.observedAtUtc).to.be.a('string'); } });"
           ]
         }
       }],
@@ -368,6 +382,88 @@
           ]
         }
       }],
+      "response": []
+    },
+    {
+      "name": "All mounts",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/mounts"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const body = pm.response.json(); pm.expect(body.mounts).to.be.an('array');",
+        "body.mounts.forEach(function (mount) { pm.expect(mount.riderPlayerId).to.be.a('string').and.not.empty; });",
+        "if (body.mounts.length) pm.collectionVariables.set('mountId', encodeURIComponent(body.mounts[0].mountId)); else pm.collectionVariables.unset('mountId');"
+      ] } }],
+      "response": []
+    },
+    {
+      "name": "Mount details",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/mounts/{{mountId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const mount = pm.response.json(); pm.expect(mount.riderPlayerId).to.be.a('string').and.not.empty; pm.expect(mount.riding).to.be.a('boolean');"
+      ] } }],
+      "response": []
+    },
+    {
+      "name": "All ships",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/ships"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const body = pm.response.json(); pm.expect(body.ships).to.be.an('array');",
+        "if (body.ships.length) pm.collectionVariables.set('shipId', encodeURIComponent(body.ships[0].shipId)); else pm.collectionVariables.unset('shipId');"
+      ] } }],
+      "response": []
+    },
+    {
+      "name": "Ship details",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/ships/{{shipId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const ship = pm.response.json(); pm.expect(ship.passengerPlayerIds).to.be.an('array'); pm.expect(ship.currentPassengerPlayerIds).to.be.an('array'); pm.expect(ship.lastDriverPlayerId).to.be.a('string');"
+      ] } }],
+      "response": []
+    },
+    {
+      "name": "All followers",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/followers"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const body = pm.response.json(); pm.expect(body.followers).to.be.an('array');",
+        "if (body.followers.length) pm.collectionVariables.set('followerId', encodeURIComponent(body.followers[0].followerId)); else pm.collectionVariables.unset('followerId');"
+      ] } }],
+      "response": []
+    },
+    {
+      "name": "Follower details",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Password", "value": "{{apiPassword}}", "type": "text" }],
+        "url": "{{baseUrl}}/api/v1/followers/{{followerId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.response.to.have.status(200);",
+        "const follower = pm.response.json(); pm.expect(follower.followingPlayerId).to.be.a('string').and.not.empty; pm.expect(follower.stats.health).to.be.a('number');"
+      ] } }],
       "response": []
     }
   ]

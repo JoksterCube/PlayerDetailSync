@@ -14,12 +14,14 @@ internal static class PlayerActivityCapture
         new(PlayerActivityStatus.Drowning, 30, true, player => HasStatus(player, "Drowning") || HasRecentAction(player, PlayerActivityStatus.Drowning)),
         new(PlayerActivityStatus.Freezing, 40, true, player => HasStatus(player, "Freezing")),
         new(PlayerActivityStatus.Burning, 50, true, player => HasStatus(player, "Burning")),
-        new(PlayerActivityStatus.FightingBoss, 60, true, player => IsFightingBoss(player) || HasRecentAction(player, PlayerActivityStatus.FightingBoss)),
+        new(PlayerActivityStatus.FightingBoss, 60, true,
+            player => HasRecentAction(player, PlayerActivityStatus.FightingBoss), IsFightingBoss),
         new(PlayerActivityStatus.HuntingSerpent, 70, true, player => HasRecentAction(player, PlayerActivityStatus.HuntingSerpent)),
         new(PlayerActivityStatus.DefendingBase, 80, true, IsDefendingBase),
         new(PlayerActivityStatus.InPvP, 90, true, player => HasRecentAction(player, PlayerActivityStatus.InPvP)),
+        new(PlayerActivityStatus.SiegingFortress, 95, false, _ => false, IsSiegingFortress),
+        new(PlayerActivityStatus.DungeonDelving, 96, false, player => player.transform.position.y > 3000f),
         new(PlayerActivityStatus.InCombat, 100, true, player => player.InAttack() || player.IsBlocking() || player.IsTargeted() || HasRecentAction(player, PlayerActivityStatus.InCombat)),
-        new(PlayerActivityStatus.DungeonDelving, 110, false, player => player.transform.position.y > 3000f),
         new(PlayerActivityStatus.LostAtSea, 115, false, IsLostAtSea),
         new(PlayerActivityStatus.Sailing, 120, false, IsSailing),
         new(PlayerActivityStatus.Portaling, 140, true, player => player.IsTeleporting()),
@@ -38,6 +40,7 @@ internal static class PlayerActivityCapture
         new(PlayerActivityStatus.TamingRanching, 175, false, player => HasRecentAction(player, PlayerActivityStatus.TamingRanching)),
         new(PlayerActivityStatus.Trading, 176, false, IsTrading),
         new(PlayerActivityStatus.Hunting, 177, false, player => HasRecentAction(player, PlayerActivityStatus.Hunting)),
+        new(PlayerActivityStatus.Gathering, 178, false, player => HasRecentAction(player, PlayerActivityStatus.Gathering)),
         new(PlayerActivityStatus.StalkingSneaking, 210, false, player => player.IsCrouching()),
         new(PlayerActivityStatus.Encumbered, 220, false, player => player.IsEncumbered()),
         new(PlayerActivityStatus.Sleeping, 230, false, player => player.IsSleeping()),
@@ -56,6 +59,8 @@ internal static class PlayerActivityCapture
         ActivityDetectors.Sort((left, right) => left.Priority.CompareTo(right.Priority));
 
     private static PlayerActivityTracker? _tracker;
+    private static Player? _lastPlayer;
+    private static bool _joining;
     private static bool _enabled;
     private static float _recentActionWindowSeconds = 20f;
     private static float _nextFishingScanTime;
@@ -70,7 +75,8 @@ internal static class PlayerActivityCapture
         Player player,
         bool enabled,
         float confirmationPeriodSeconds,
-        IReadOnlyList<StatusEffect>? statusEffects)
+        IReadOnlyList<StatusEffect>? statusEffects,
+        IReadOnlyList<Character> characters)
     {
         if (!ReferenceEquals(player, Player.m_localPlayer)) return null;
 
@@ -85,13 +91,35 @@ internal static class PlayerActivityCapture
         }
 
         _enabled = true;
+        if (!ReferenceEquals(player, _lastPlayer))
+        {
+            _lastPlayer = player;
+            _joining = true;
+            _tracker = null;
+        }
         _recentActionWindowSeconds = Mathf.Clamp(confirmationPeriodSeconds + 5f, 20f, 65f);
         UpdateActivityEffects(statusEffects);
         long playerId = player.GetPlayerID();
         if (_tracker == null || _tracker.PlayerId != playerId)
-            _tracker = new PlayerActivityTracker(playerId, ActivityDetectors);
+        {
+            _tracker = new PlayerActivityTracker(playerId, ActivityDetectors, _joining);
+            _joining = false;
+        }
 
-        return _tracker.Capture(player, Mathf.Clamp(confirmationPeriodSeconds, 0f, 60f));
+        return _tracker.Capture(player, Mathf.Clamp(confirmationPeriodSeconds, 0f, 60f), characters);
+    }
+
+    internal static void OnPlayerSpawned(Player player)
+    {
+        if (!ReferenceEquals(player, Player.m_localPlayer)) return;
+
+        _joining = true;
+        _tracker = null;
+        RecentActions.Clear();
+        RecentContainers.Clear();
+        ExpiredContainerIds.Clear();
+        _nextFishingScanTime = 0f;
+        _hasOwnedFishingFloat = false;
     }
 
     internal static void RecordAction(Player player, PlayerActivityStatus status)
@@ -167,6 +195,9 @@ internal static class PlayerActivityCapture
     internal static void RecordStationInteraction(Player player, GameObject target)
     {
         if (!_enabled || !ReferenceEquals(player, Player.m_localPlayer)) return;
+
+        if (target.GetComponentInParent<Pickable>() != null)
+            RecordAction(player, PlayerActivityStatus.Gathering);
 
         string targetName = target.name;
         if (target.GetComponentInParent<CookingStation>() != null ||
@@ -267,6 +298,33 @@ internal static class PlayerActivityCapture
         return true;
     }
 
+    private static bool IsSiegingFortress(Player player, IReadOnlyList<Character> characters)
+    {
+        if (player.GetCurrentBiome() != Heightmap.Biome.AshLands) return false;
+
+        Vector3 position = player.transform.position;
+        ZoneSystem? zoneSystem = ZoneSystem.instance;
+        if (zoneSystem == null || !zoneSystem.FindClosestLocation("Ashlands_Fortress", position, out var fortress) ||
+            (fortress.m_position - position).sqrMagnitude > 3600f)
+        {
+            return false;
+        }
+
+        foreach (Character character in characters)
+        {
+            if (character == null || character.IsDead() ||
+                (character.transform.position - position).sqrMagnitude > 3600f)
+            {
+                continue;
+            }
+
+            BaseAI? ai = character.GetComponent<BaseAI>();
+            if (ai != null && ai.IsEnemy(player)) return true;
+        }
+
+        return false;
+    }
+
     private static bool IsTrading(Player player) => StoreGui.IsVisible();
 
     private static bool IsCartHauling(Player player)
@@ -275,11 +333,11 @@ internal static class PlayerActivityCapture
         return attachPoint != null && attachPoint.GetComponentInParent<Vagon>() != null;
     }
 
-    private static bool IsFightingBoss(Player player)
+    private static bool IsFightingBoss(Player player, IReadOnlyList<Character> characters)
     {
         if (!player.IsTargeted()) return false;
 
-        foreach (Character character in Character.GetAllCharacters())
+        foreach (Character character in characters)
         {
             if (character == null || character == player || character.IsDead() || !character.IsBoss() ||
                 (character.transform.position - player.transform.position).sqrMagnitude > 2500f)

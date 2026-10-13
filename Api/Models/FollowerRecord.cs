@@ -38,16 +38,34 @@ internal sealed class FollowerRecord
     [DataMember(Name = "statuses", Order = 10)]
     public TimedPlayerData[] Statuses { get; set; } = [];
 
-    internal static FollowerRecord[] Capture(Player player)
+    [DataMember(Name = "followingPlayerId", Order = 11)]
+    public string FollowingPlayerId { get; set; } = "";
+
+    [DataMember(Name = "observedAtUtc", Order = 12)]
+    public string ObservedAtUtc { get; set; } = "";
+
+    [DataMember(Name = "characterDataAgeSeconds", Order = 13)]
+    public float CharacterDataAgeSeconds { get; set; }
+
+    internal static bool IsFollowingPlayer(bool followTargetMatches, string savedFollowName, string playerName) =>
+        string.IsNullOrEmpty(savedFollowName)
+            ? followTargetMatches
+            : string.Equals(savedFollowName, playerName, StringComparison.Ordinal);
+
+    internal static FollowerRecord[] Capture(Player player, IReadOnlyList<Character> characters)
     {
         var followers = new List<FollowerRecord>();
-        foreach (Character character in Character.GetAllCharacters())
+        string playerName = player.GetPlayerName();
+        foreach (Character character in characters)
         {
             if (character == null || character.IsDead()) continue;
             MonsterAI ai = character.GetComponent<MonsterAI>();
-            if (ai == null || ai.GetFollowTarget() != player.gameObject) continue;
+            if (ai == null) continue;
             ZDOID id = character.GetZDOID();
             if (id == ZDOID.None) continue;
+            bool followTargetMatches = ai.GetFollowTarget() == player.gameObject;
+            string savedFollowName = ZDOMan.instance?.GetZDO(id)?.GetString(ZDOVars.s_follow, "") ?? "";
+            if (!IsFollowingPlayer(followTargetMatches, savedFollowName, playerName)) continue;
             Tameable tameable = character.GetComponent<Tameable>();
             Vector3 position = character.transform.position;
             string name = character.GetHoverName();
@@ -84,6 +102,8 @@ internal sealed class FollowerRecord
                 FollowerId = follower.FollowerId, Name = follower.Name, Species = follower.Species,
                 Position = follower.Position, Level = follower.Level, Tamed = follower.Tamed,
                 Hungry = follower.Hungry, Alerted = follower.Alerted, Stats = follower.Stats,
+                FollowingPlayerId = follower.FollowingPlayerId, ObservedAtUtc = follower.ObservedAtUtc,
+                CharacterDataAgeSeconds = follower.CharacterDataAgeSeconds + elapsedSeconds,
                 Statuses = PlayerDataSnapshot.ApplyElapsed(follower.Statuses, elapsedSeconds)
             };
         }

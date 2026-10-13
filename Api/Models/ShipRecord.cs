@@ -25,4 +25,31 @@ internal sealed class ShipRecord
 
     [DataMember(Name = "atHelm", Order = 7)]
     public bool AtHelm { get; set; }
+
+    [DataMember(Name = "passengerPlayerIds", Order = 8)]
+    public string[] PassengerPlayerIds { get; set; } = [];
+
+    [DataMember(Name = "currentPassengerPlayerIds", Order = 9)]
+    public string[] CurrentPassengerPlayerIds { get; set; } = [];
+
+    [DataMember(Name = "lastDriverPlayerId", Order = 10)]
+    public string LastDriverPlayerId { get; set; } = "";
+
+    [DataMember(Name = "observedAtUtc", Order = 11)]
+    public string ObservedAtUtc { get; set; } = "";
+
+    [DataMember(Name = "lastDrivenAtUtc", Order = 12)]
+    public string LastDrivenAtUtc { get; set; } = "";
+
+    [DataMember(Name = "characterDataAgeSeconds", Order = 13)]
+    public float CharacterDataAgeSeconds { get; set; }
+
+    internal ShipRecord Copy() => new()
+    {
+        ShipId = ShipId, Name = Name, Position = Position, Speed = Speed,
+        SpeedSetting = SpeedSetting, SailUp = SailUp, AtHelm = AtHelm,
+        PassengerPlayerIds = PassengerPlayerIds, CurrentPassengerPlayerIds = CurrentPassengerPlayerIds,
+        LastDriverPlayerId = LastDriverPlayerId, ObservedAtUtc = ObservedAtUtc,
+        LastDrivenAtUtc = LastDrivenAtUtc, CharacterDataAgeSeconds = CharacterDataAgeSeconds
+    };
 }

@@ -32,12 +32,28 @@ internal sealed class MountRecord
     [DataMember(Name = "statuses", Order = 9)]
     public TimedPlayerData[] Statuses { get; set; } = [];
 
+    [DataMember(Name = "riderPlayerId", Order = 10)]
+    public string RiderPlayerId { get; set; } = "";
+
+    [DataMember(Name = "riding", Order = 11)]
+    public bool Riding { get; set; }
+
+    [DataMember(Name = "observedAtUtc", Order = 12)]
+    public string ObservedAtUtc { get; set; } = "";
+
+    [DataMember(Name = "characterDataAgeSeconds", Order = 13)]
+    public float CharacterDataAgeSeconds { get; set; }
+
     [OnDeserializing]
     private void OnDeserializing(StreamingContext context) => Statuses = [];
 
     internal MountRecord WithElapsedSeconds(float elapsedSeconds) => new()
     {
         MountId = MountId,
+        RiderPlayerId = RiderPlayerId,
+        Riding = Riding,
+        ObservedAtUtc = ObservedAtUtc,
+        CharacterDataAgeSeconds = CharacterDataAgeSeconds + elapsedSeconds,
         Name = Name,
         Species = Species,
         Position = Position,

@@ -17,18 +17,21 @@ internal sealed class PlayerSummaryResponse
     [DataMember(Name = "playerId", Order = 1)]
     public string PlayerId { get; set; } = "";
 
-    [DataMember(Name = "steamUserId", Order = 6)]
+    [DataMember(Name = "steamUserId", Order = 4)]
     public string SteamUserId { get; set; } = "";
+
+    [DataMember(Name = "steamName", Order = 3)]
+    public string SteamName { get; set; } = "";
 
     [DataMember(Name = "name", Order = 2)]
     public string Name { get; set; } = "";
 
-    [DataMember(Name = "online", Order = 3)]
+    [DataMember(Name = "online", Order = 5)]
     public bool Online { get; set; }
 
-    [DataMember(Name = "lastSeenUtc", Order = 4)]
+    [DataMember(Name = "lastSeenUtc", Order = 6)]
     public string LastSeenUtc { get; set; } = "";
 
-    [DataMember(Name = "position", Order = 5)]
+    [DataMember(Name = "position", Order = 7)]
     public PlayerPosition Position { get; set; } = new();
 }

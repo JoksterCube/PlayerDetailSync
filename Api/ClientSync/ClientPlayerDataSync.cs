@@ -13,23 +13,24 @@ internal static class ClientPlayerDataSync
 {
     private const string RpcName = "JoksterCube.PlayerDetailSync.ClientPlayerData";
     private const string RefreshRpcName = "JoksterCube.PlayerDetailSync.RequestClientData";
+    private const string AcceptedRpcName = "JoksterCube.PlayerDetailSync.ClientDataAccepted";
     private const int MaxPayloadLength = 262144;
+    private static readonly UTF8Encoding Utf8 = new(false);
+
     private static readonly Func<ZRoutedRpc, long> GetServerPeerId =
         AccessTools.MethodDelegate<Func<ZRoutedRpc, long>>(
             AccessTools.Method(typeof(ZRoutedRpc), "GetServerPeerID"));
     private static readonly Func<ZRoutedRpc, long, ZNetPeer> GetRoutedPeer =
         AccessTools.MethodDelegate<Func<ZRoutedRpc, long, ZNetPeer>>(
             AccessTools.Method(typeof(ZRoutedRpc), "GetPeer"));
-    private static readonly UTF8Encoding Utf8 = new(false);
     private static readonly Dictionary<long, ReportedPlayerData> Reports = new();
+    private static readonly ClientReportSchedule ReportSchedule = new();
 
     private static ZRoutedRpc? _registeredRpc;
     private static bool _loggedFirstSend;
     private static bool _loggedFirstReceive;
     private static bool _loggedFirstDataRpc;
-    private static float _nextSendTime;
     private static float _nextSendDiagnosticTime;
-    private static float _lastSendTime = -1f;
     private static Player? _lastLocalPlayer;
     private static bool _reportsChanged;
     private static readonly Dictionary<long, ClientRefreshRetry> RefreshRetries = new();
@@ -48,6 +49,14 @@ internal static class ClientPlayerDataSync
         return changed;
     }
 
+    internal static void ResetClientSession()
+    {
+        ReportSchedule.Reset();
+        _lastLocalPlayer = null;
+        _loggedFirstSend = false;
+        _nextSendDiagnosticTime = 0f;
+    }
+
     internal static void Update(float refreshInterval)
     {
         ZNet? network = ZNet.instance;
@@ -56,9 +65,7 @@ internal static class ClientPlayerDataSync
 
         if (!ReferenceEquals(_registeredRpc, routedRpc))
         {
-            _nextSendTime = 0f;
-            _lastSendTime = -1f;
-            _lastLocalPlayer = null;
+            ResetClientSession();
             if (network.IsServer())
             {
                 routedRpc.Register<string>(RpcName, ReceiveClientData);
@@ -66,6 +73,7 @@ internal static class ClientPlayerDataSync
             else
             {
                 routedRpc.Register(RefreshRpcName, ReceiveRefreshRequest);
+                routedRpc.Register(AcceptedRpcName, ReceiveReportAccepted);
             }
             _registeredRpc = routedRpc;
         }
@@ -76,15 +84,25 @@ internal static class ClientPlayerDataSync
         Player? localPlayer = Player.m_localPlayer;
         if (!ReferenceEquals(localPlayer, _lastLocalPlayer))
         {
+            ResetClientSession();
             _lastLocalPlayer = localPlayer;
-            _nextSendTime = 0f;
         }
         float now = Time.realtimeSinceStartup;
-        if (now < _nextSendTime) return;
+        if (!ReportSchedule.IsDue(now)) return;
 
-        if (localPlayer == null || network.GetServerPeer() == null) return;
+        if (localPlayer == null || localPlayer.GetPlayerID() <= 0 || network.GetServerPeer() == null) return;
 
         SendClientReport(routedRpc, localPlayer, now, refreshInterval);
+    }
+
+    private static void ReceiveReportAccepted(long sender)
+    {
+        ZNet? network = ZNet.instance;
+        ZRoutedRpc? routedRpc = ZRoutedRpc.instance;
+        if (network == null || network.IsServer() || routedRpc == null ||
+            !VersionSync.ServerVersionMatched || sender != GetServerPeerId(routedRpc)) return;
+
+        ReportSchedule.Accept();
     }
 
     internal static bool RequestClientRefresh(long playerId)
@@ -131,9 +149,8 @@ internal static class ClientPlayerDataSync
 
     private static void SendClientReport(ZRoutedRpc routedRpc, Player localPlayer, float now, float refreshInterval)
     {
-        if (_lastSendTime >= 0f && now - _lastSendTime < 1f) return;
-        _lastSendTime = now;
-        _nextSendTime = now + Mathf.Clamp(refreshInterval, 1f, 60f);
+        if (!ReportSchedule.CanSend(now)) return;
+        ReportSchedule.RecordSend(now, refreshInterval);
         PlayerDataSnapshot snapshot = PlayerDataSnapshot.Capture(localPlayer);
         string payload = Serialize(snapshot);
         if (payload.Length > MaxPayloadLength) return;
@@ -209,6 +226,7 @@ internal static class ClientPlayerDataSync
             Reports[peer.m_uid] = new ReportedPlayerData(snapshot!, DateTime.UtcNow);
             RefreshRetries.Remove(peer.m_uid);
             _reportsChanged = true;
+            routedRpc.InvokeRoutedRPC(sender, AcceptedRpcName);
             if (!_loggedFirstReceive || DateTime.UtcNow >= _nextAcceptedReportDiagnosticUtc)
             {
                 Plugin.ModLogger.LogDebug("Accepted client character-data report.");
@@ -231,14 +249,16 @@ internal static class ClientPlayerDataSync
         var serializer = new DataContractJsonSerializer(typeof(PlayerDataSnapshot));
         using var stream = new MemoryStream();
         serializer.WriteObject(stream, snapshot);
-        return Utf8.GetString(stream.ToArray());
+        return Utf8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
     }
 
     private static PlayerDataSnapshot? Deserialize(string payload)
     {
         var serializer = new DataContractJsonSerializer(typeof(PlayerDataSnapshot));
         using var stream = new MemoryStream(Utf8.GetBytes(payload));
-        return serializer.ReadObject(stream) as PlayerDataSnapshot;
+        PlayerDataSnapshot? snapshot = serializer.ReadObject(stream) as PlayerDataSnapshot;
+        PlayerReportValidator.FilterInvalidPrivateKeys(snapshot);
+        return snapshot;
     }
 
 }

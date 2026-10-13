@@ -1,8 +1,8 @@
 {
   "name": "PlayerDetailSync",
-  "version_number": "0.6.2",
+  "version_number": "0.14.1",
   "website_url": "https://github.com/JoksterCube/PlayerDetailSync",
-  "description": "A server-hosted HTTP API for live Valheim player data.",
+  "description": "A server-hosted player data API and configurable event webhooks for Valheim.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2351"
   ]

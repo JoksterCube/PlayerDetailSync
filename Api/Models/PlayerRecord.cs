@@ -76,12 +76,19 @@ internal sealed class PlayerRecord
     [DataMember(Name = "activity", Order = 22)]
     public PlayerActivity? Activity { get; set; }
 
+    [DataMember(Name = "steamName", Order = 23)]
+    public string SteamName { get; set; } = "";
+
+    [DataMember(Name = "lastActivity", Order = 24)]
+    public PlayerActivity? LastActivity { get; set; }
+
     [OnDeserializing]
     private void OnDeserializing(StreamingContext context)
     {
         Followers = [];
         LifetimeStats = [];
         PrivateKeys = [];
+        SteamName = "";
     }
 
     [DataMember(Name = "currentMount", Order = 90, EmitDefaultValue = false)]
@@ -144,14 +151,33 @@ internal sealed class PlayerRecord
         Foods = data?.Foods ?? [];
         Stats = data?.Stats ?? new PlayerStats();
         Equipment = data?.Equipment ?? [];
-        Followers = data?.Followers ?? [];
-        Mount = data?.Mount;
+        Followers = FollowerRecord.ApplyElapsed(data?.Followers ?? [], 0f);
+        foreach (FollowerRecord follower in Followers)
+        {
+            follower.FollowingPlayerId = "";
+            follower.ObservedAtUtc = "";
+        }
+        Mount = data?.Mount?.WithElapsedSeconds(0f);
+        if (Mount != null)
+        {
+            Mount.RiderPlayerId = "";
+            Mount.ObservedAtUtc = "";
+        }
         Riding = Mount != null;
         LifetimeStats = data?.LifetimeStats ?? [];
         PrivateKeys = data?.PrivateKeys ?? [];
-        Ship = data?.Ship;
+        Ship = data?.Ship?.Copy();
+        if (Ship != null)
+        {
+            Ship.ObservedAtUtc = "";
+            Ship.LastDriverPlayerId = "";
+            Ship.LastDrivenAtUtc = "";
+            Ship.PassengerPlayerIds = [];
+            Ship.CurrentPassengerPlayerIds = [];
+        }
         Aboard = Ship != null;
         Activity = data?.Activity;
+        SteamName = data?.SteamName ?? "";
     }
 
     internal PlayerRecord WithOfflineAge(float elapsedSeconds)
@@ -160,6 +186,7 @@ internal sealed class PlayerRecord
         {
             PlayerId = PlayerId,
             SteamUserId = SteamUserId ?? "",
+            SteamName = SteamName ?? "",
             Name = Name,
             X = X,
             Y = Y,
@@ -181,7 +208,13 @@ internal sealed class PlayerRecord
             PrivateKeys = PrivateKeys,
             Ship = Ship,
             Aboard = false,
-            Activity = null,
+            Activity = Activity?.State == PlayerActivityStatus.Offline ? Activity : new PlayerActivity
+            {
+                State = PlayerActivityStatus.Offline,
+                ActiveStates = [PlayerActivityStatus.Offline],
+                ObservedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
+            },
+            LastActivity = GetLastClassifiedActivity(Activity, LastActivity),
             SessionId = SessionId
         };
     }
@@ -192,6 +225,7 @@ internal sealed class PlayerRecord
         {
             PlayerId = live.PlayerId,
             SteamUserId = string.IsNullOrEmpty(live.SteamUserId) ? SteamUserId ?? "" : live.SteamUserId,
+            SteamName = string.IsNullOrEmpty(live.SteamName) ? SteamName ?? "" : live.SteamName,
             Name = live.Name,
             X = live.X,
             Y = live.Y,
@@ -211,8 +245,21 @@ internal sealed class PlayerRecord
             PrivateKeys = PrivateKeys,
             Ship = Ship,
             Aboard = false,
-            Activity = Activity,
+            Activity = Online ? Activity : null,
+            LastActivity = LastActivity,
             SessionId = live.SessionId
         };
     }
+
+    internal void RetainActivityHistory(PlayerRecord previous)
+    {
+        LastActivity = Activity?.State == previous.Activity?.State
+            ? previous.LastActivity
+            : GetLastClassifiedActivity(previous.Activity, previous.LastActivity);
+    }
+
+    private static PlayerActivity? GetLastClassifiedActivity(PlayerActivity? activity, PlayerActivity? lastActivity) =>
+        activity != null && activity.State != PlayerActivityStatus.Offline &&
+        activity.State != PlayerActivityStatus.Unclassified && activity.State != PlayerActivityStatus.Joining
+            ? activity : lastActivity;
 }

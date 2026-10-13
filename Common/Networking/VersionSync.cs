@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using JoksterCube.PlayerDetailSync.Api;
-using static JoksterCube.PlayerDetailSync.Settings.PluginConstants;
+using static JoksterCube.PlayerDetailSync.Settings.Constants.Plugin;
 
 namespace JoksterCube.PlayerDetailSync.Common.Networking;
 
@@ -27,6 +27,7 @@ internal static class VersionSync
         }
         else
         {
+            ClientPlayerDataSync.ResetClientSession();
             _waitingForServerVersion = true;
             ServerVersionMatched = false;
             _serverHandshakeStartedAt = UnityEngine.Time.realtimeSinceStartup;
@@ -118,5 +119,6 @@ internal static class VersionSync
 
         _waitingForServerVersion = false;
         ServerVersionMatched = false;
+        ClientPlayerDataSync.ResetClientSession();
     }
 }

@@ -11,9 +11,16 @@ namespace JoksterCube.PlayerDetailSync.Api;
 
 internal static class PlayerReportValidator
 {
+    internal static void FilterInvalidPrivateKeys(PlayerDataSnapshot? snapshot)
+    {
+        if (snapshot?.PrivateKeys == null || snapshot.PrivateKeys.Length > 256) return;
+        snapshot.PrivateKeys = Array.FindAll(snapshot.PrivateKeys, key => !string.IsNullOrWhiteSpace(key));
+    }
+
     internal static string? GetError(PlayerDataSnapshot? snapshot)
     {
         if (snapshot == null) return "snapshot is missing";
+        if (snapshot.SteamName != null && snapshot.SteamName.Length > 128) return "steamName exceeds 128 characters";
         string? error = GetTimedError(snapshot.Statuses, "statuses") ?? GetTimedError(snapshot.Foods, "foods");
         if (error != null) return error;
         error = GetFollowersError(snapshot.Followers);
@@ -66,20 +73,26 @@ internal static class PlayerReportValidator
     private static string? GetLifetimeStatsError(PlayerStatistic[]? stats)
     {
         if (stats == null) return "lifetimeStats is missing";
-        if (stats.Length > 64) return "lifetimeStats exceeds 64 entries";
-        var names = new HashSet<PlayerStatisticName>();
+        if (stats.Length > Enum.GetNames(typeof(PlayerStatType)).Length)
+            return "lifetimeStats exceeds the number of game stat types";
+        var names = new HashSet<string>(StringComparer.Ordinal);
         for (int index = 0; index < stats.Length; index++)
         {
             PlayerStatistic? stat = stats[index];
             string path = $"lifetimeStats[{index}]";
             if (stat == null) return path + " is missing";
-            if (!stat.HasName) return path + ".name is missing";
-            if (!Enum.IsDefined(typeof(PlayerStatisticName), stat.Name)) return path + ".name is invalid";
-            if (!stat.HasUnit) return path + ".unit is missing";
-            if (!Enum.IsDefined(typeof(PlayerStatisticUnit), stat.Unit)) return path + ".unit is invalid";
+            string name = stat.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) return path + ".name is missing";
+            if (!Enum.TryParse(name, false, out PlayerStatType type) ||
+                !Enum.IsDefined(typeof(PlayerStatType), type) ||
+                type == PlayerStatType.Count ||
+                type == PlayerStatType.None ||
+                !string.Equals(Enum.GetName(typeof(PlayerStatType), type), name, StringComparison.Ordinal))
+                return path + ".name is invalid";
+            if (!(stat.Value > 0f)) return path + ".value must be greater than 0";
             string? error = GetNumberError(stat.Value, path + ".value", 1000000000000f);
             if (error != null) return error;
-            if (!names.Add(stat.Name)) return path + ".name is duplicated";
+            if (!names.Add(name)) return path + ".name is duplicated";
         }
         return null;
     }

@@ -2,7 +2,7 @@ namespace JoksterCube.PlayerDetailSync.Api;
 
 internal enum PlayerActivityStatus
 {
-    Idling,
+    Joining,
     IdlingAtBase,
     IdlingAtOutpost,
     IdlingInDanger,
@@ -39,12 +39,14 @@ internal enum PlayerActivityStatus
     Trading,
     StalkingSneaking,
     Hunting,
+    Gathering,
     Encumbered,
     Resting,
     Building,
-    Combat,
     Running,
     Sitting,
     Exploring,
-    Adventuring
+    Adventuring,
+    Unclassified,
+    Offline
 }

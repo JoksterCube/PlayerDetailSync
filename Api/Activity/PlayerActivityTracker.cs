@@ -12,21 +12,29 @@ internal sealed class PlayerActivityTracker
     private readonly List<PlayerActivityStatus> _confirmedStates = new(16);
     private readonly List<PlayerActivityStatus> _activeStates = new(48);
     private readonly IReadOnlyList<ActivityDetector> _activityDetectors;
+    private bool _joining;
     private float _lastCapturedAt = -1f;
     private float _lastNonIdleAt;
 
     internal long PlayerId { get; }
 
-    internal PlayerActivityTracker(long playerId, IReadOnlyList<ActivityDetector> activityDetectors)
+    internal PlayerActivityTracker(
+        long playerId,
+        IReadOnlyList<ActivityDetector> activityDetectors,
+        bool joining)
     {
         PlayerId = playerId;
         _activityDetectors = activityDetectors;
+        _joining = joining;
         _lastNonIdleAt = Time.realtimeSinceStartup;
         for (int index = 0; index < _activeSeconds.Length; index++)
             _activeSeconds[index] = -1f;
     }
 
-    internal PlayerActivity Capture(Player player, float confirmationPeriodSeconds)
+    internal PlayerActivity? Capture(
+        Player player,
+        float confirmationPeriodSeconds,
+        IReadOnlyList<Character> characters)
     {
         float now = Time.realtimeSinceStartup;
         float elapsed = _lastCapturedAt < 0f ? 0f : Mathf.Max(0f, now - _lastCapturedAt);
@@ -34,7 +42,7 @@ internal sealed class PlayerActivityTracker
 
         _immediateStates.Clear();
         _confirmedStates.Clear();
-        PlayerActivityStatus mostEstablishedState = PlayerActivityStatus.Idling;
+        PlayerActivityStatus mostEstablishedState = PlayerActivityStatus.IdlingAtBase;
         float greatestActiveSeconds = -1f;
         float movementSqr = _hasPosition ? (player.transform.position - _lastPosition).sqrMagnitude : 0f;
         bool moved = movementSqr > 0.0025f;
@@ -42,7 +50,9 @@ internal sealed class PlayerActivityTracker
 
         foreach (ActivityDetector detector in _activityDetectors)
         {
-            bool active = detector.IsActive(player);
+            bool active = detector.IsActiveWithCharacters != null
+                ? detector.IsActiveWithCharacters(player, characters) || detector.IsActive(player)
+                : detector.IsActive(player);
             if (!detector.IsImmediate)
             {
                 int stateIndex = (int)detector.Status;
@@ -77,6 +87,19 @@ internal sealed class PlayerActivityTracker
         if (_immediateStates.Count > 0)
         {
             primaryState = _immediateStates[0];
+            if (primaryState == PlayerActivityStatus.InCombat)
+            {
+                bool siegeConfirmed = _confirmedStates.Contains(PlayerActivityStatus.SiegingFortress);
+                bool dungeonConfirmed = _confirmedStates.Contains(PlayerActivityStatus.DungeonDelving);
+                if (siegeConfirmed || dungeonConfirmed)
+                {
+                    primaryState = siegeConfirmed &&
+                        (!dungeonConfirmed || _activeSeconds[(int)PlayerActivityStatus.SiegingFortress] >=
+                            _activeSeconds[(int)PlayerActivityStatus.DungeonDelving])
+                        ? PlayerActivityStatus.SiegingFortress
+                        : PlayerActivityStatus.DungeonDelving;
+                }
+            }
         }
         else if (_confirmedStates.Count > 0)
         {
@@ -84,22 +107,15 @@ internal sealed class PlayerActivityTracker
         }
         else
         {
-            if (traveled && IsOverlandOutsideBase(player))
-            {
-                primaryState = PlayerActivityStatus.Adventuring;
-            }
-            else if (idleSeconds >= Math.Max(90f, confirmationPeriodSeconds))
-            {
-                primaryState = player.GetBaseValue() >= 3
-                    ? player.GetComfortLevel() >= 5 ? PlayerActivityStatus.IdlingAtBase : PlayerActivityStatus.IdlingAtOutpost
-                    : player.GetBaseValue() > 0 ? PlayerActivityStatus.IdlingAtOutpost : PlayerActivityStatus.IdlingInDanger;
-            }
-            else
-            {
-                primaryState = PlayerActivityStatus.Idling;
-            }
-            _activeStates.Add(primaryState);
+            bool idleConfirmed = idleSeconds >= Math.Max(90f, confirmationPeriodSeconds);
+            primaryState = SelectFallback(
+                _joining, traveled && IsOverlandOutsideBase(player), idleSeconds, confirmationPeriodSeconds,
+                idleConfirmed ? player.GetBaseValue() : 0, idleConfirmed ? player.GetComfortLevel() : 0);
+            if (primaryState != PlayerActivityStatus.Unclassified)
+                _activeStates.Add(primaryState);
         }
+
+        if (primaryState != PlayerActivityStatus.Joining) _joining = false;
 
         _lastPosition = player.transform.position;
         _hasPosition = true;
@@ -110,6 +126,16 @@ internal sealed class PlayerActivityTracker
             ActiveStates = _activeStates.ToArray(),
             ObservedAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
         };
+    }
+
+    internal static PlayerActivityStatus SelectFallback(
+        bool joining, bool adventuring, float idleSeconds, float confirmationPeriodSeconds, int baseValue, int comfort)
+    {
+        if (adventuring) return PlayerActivityStatus.Adventuring;
+        if (idleSeconds >= Math.Max(90f, confirmationPeriodSeconds))
+            return baseValue >= 3 && comfort >= 5 ? PlayerActivityStatus.IdlingAtBase
+                : baseValue > 0 ? PlayerActivityStatus.IdlingAtOutpost : PlayerActivityStatus.IdlingInDanger;
+        return joining ? PlayerActivityStatus.Joining : PlayerActivityStatus.Unclassified;
     }
 
     private static bool IsOverlandOutsideBase(Player player) =>
